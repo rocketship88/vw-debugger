@@ -1,0 +1,8 @@
+Release .002 :)
+
+This version relaxes the entry max size on the proc source code.
+since the default we are using was only 3000 chars, a 500 line
+proc might be nearly 30,000 so we'll use 10x for that one, otherwise
+most proc's text would have been too big. Dumping this out to the
+console is still quite fast since we use only one puts to do it.
+

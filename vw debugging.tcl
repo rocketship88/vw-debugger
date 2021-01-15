@@ -184,10 +184,11 @@ set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to
 #   but there is a refresh button on each window that can be used to update the list of incices.
 #   The entry widget with the array indices can be selected for copying, but cannot be modified.
 #   
-#   In a vw+ window, there are 3 bindings on the label (the variable name)
+#   In a vw+ window, there are 4 bindings on the label (the variable name)
 #      left-click         -> display the variable's value on stdout, if an array, use parray
 #      shift-left-click   -> if an array, use parray, if a list, try to display as a dict
-#      control-left-click -> sort the list and display in a column on stdout (console)
+#      control-left-click -> output the list and display in a column on stdout (console)
+#      alt-left-click -> sort the list and display in a column on stdout (console)
 #   ----------------------------------------------------------------------
 
 
@@ -535,8 +536,18 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 #				set sanityd [eval "string range  \$$it 0 $sizemax"]
 				set sanityd [string range [set $it] 0 $sizemax]
 				if { $sanity > $sizemax } {
+					set splitup [split $it "::"]
+					set nspace  [lindex $splitup  2 ]
+					set nname  __$nspace
+					set fname "::${nspace}::${nname}" ;# check for our proc name, it's the namespace name used twice with extra __
+#					puts "it= |$it| sanity= |$sanity| ii= |$ii| i= |$i| j= |$j| splitup= |$splitup| nspace= |$nspace| nname= |$nname|  fname= |$fname| "
 					set zok 0
 					set zerror "Too large to safely monitor : $sanity  = $sanityd"
+					if { $it eq $fname } { ;# if it's ours, we'll be less cautious and allow for a longer string, since it's the entire proc code
+						if { $sanity < ($sizemax * 10) } {
+							set zok 1	;# so if it's the same as $it it's the enemy who is us
+						}
+					}
 				} else {
 					set zok 1	
 				}
@@ -715,7 +726,7 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 			set nws [expr {(    $nws % 10   )}] ;# after this many new windows, we start placing them at the top again
 			set ycord [expr {(   -6 + ($nws * 100)   )}]
 			set newgeom ${width}x$height+-6+$ycord
-			puts stderr "newgeom= |$newgeom| "
+#			puts stderr "newgeom= |$newgeom| "
 		}
 		set top [split $w .]
 		set wtop .[lindex $top 1]
