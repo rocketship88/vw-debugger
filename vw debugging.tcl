@@ -1,5 +1,5 @@
 #proc (just an aid to my editor for text folding)
-# this is version .0001 :)
+# this is version .002 :)
 #these array indices, serve as a configuration for this debugger so be careful
 #with the other ones, which are used by the debugger
 
