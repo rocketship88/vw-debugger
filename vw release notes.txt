@@ -6,3 +6,15 @@ proc might be nearly 30,000 so we'll use 10x for that one, otherwise
 most proc's text would have been too big. Dumping this out to the
 console is still quite fast since we use only one puts to do it.
 
+current known bugs:
+
+1. global variables defined in a local proc that are not yet defined
+cause problems
+2. second time calling a proc, we still have the namespace for the proc
+around need to clean it up, but we might have a problem with recursion 
+here too.
+
+lot's of quoting problems since we are generating code dynamically
+
+so, we're not really even an alpha yet :(
+
