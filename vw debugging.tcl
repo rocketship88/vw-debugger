@@ -1,5 +1,5 @@
 #proc (just an aid to my editor for text folding)
-# this is version .002 :)
+# this is version .003 :)
 #these array indices, serve as a configuration for this debugger so be careful
 #with the other ones, which are used by the debugger
 
@@ -43,6 +43,9 @@ set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to
 #	vwait ::__sleep__tmp__$uniq
 #	unset ::__sleep__tmp__$uniq
 #}
+# fixed some quoting difficulties, had to use our global array to copy some difficult text into the namespace for local variables
+# then we can copy the locals using a variable instead of trying to add backslashes all over the place, don't like it, but it seems
+# to be working. Glad this is still a local thing on github, nobody is using this yet besides me.
 
 #   --------------------------------------------------------------------
 #   This is a collection of procedures to be sourced into a new program
@@ -1019,13 +1022,15 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 	
 #	puts "proc_def= |$proc_def| "
 	
-	set pdef "variable __$ns \{ \n$proc_def \n \}\n"
+	set pdef "variable __$ns \{\n$proc_def \n \}\n" ;# not a problem here with quoting, since it's a valid proc we got back, so quoting should be correct
 	
 #	puts "pdef= |$pdef| "
 	set ncmd ""
 	set ncmd $pdef
 #	puts "------------ top ----------------"
+	set nvar -1
 	foreach var $vars {
+		incr nvar
 #		puts "var= |$var| "
 		set cmd "array exist $var" ;# command to run in caller stack frame
 		set arr [uplevel 1 $cmd]   ;# and now run it there
@@ -1034,7 +1039,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 			set aval [uplevel 1 $cmd]
 			set ok 1
 		} err_code] {
-			puts "$err_code for $var, so skip it"
+			puts "$err_code for $var, so skip it, is it a global and not defined yet?"
 			set ok 0
 		}
 		if { ! $ok } {
@@ -1042,16 +1047,34 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 		}
 #		puts "var=$var  aval= |$aval| arr= |$arr|"
 		
+#		set f1 "\{"
+#		set f2 "\}"
+#		set aval [string map  [list $f1 \\$f1 $f2 \\$f2 ] $aval]
+		
+		
+		set ::___zz___(temp,$nvar) $aval
 		if { $arr } {
-			append	ncmd "variable $var \{() $aval\} \n"
+			append	ncmd "variable $var ()\\ \$::___zz___(temp,$nvar) \n"
 		} else {
-			append	ncmd "variable $var \{$aval\} \n"
+			append	ncmd "variable $var \$::___zz___(temp,$nvar) \n"
 		}
 	}
 #	puts "in top ncmd= |$ncmd| ns= |$ns| " ;# these are the commands we run to setup the namespace with the user variables
 	
-	namespace eval $ns $ncmd
+#	puts "abouut to do the namespace"
+#	puts $ncmd
+if [catch {
+		namespace eval $ns $ncmd
+} err_code] {
+	puts $err_code
+	puts stderr $ncmd 
+}
 	$::___zz___(vw+) "${ns}::" .$ns
+
+#	puts $err_code 
+#	puts $ncmd
+#	vwait ::forever
+
 	
 	if { [info exist ::___zz___(cb2,.$ns)] && $::___zz___(cb2,.$ns) && [info exist ::___zz___(cb3,.$ns)] && !$::___zz___(cb3,.$ns) } {
 #		puts "do auto list"
