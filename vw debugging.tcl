@@ -1,5 +1,5 @@
 #proc (just an aid to my editor for text folding)
-# this is version .003 :)
+# this is version .004 :)
 #these array indices, serve as a configuration for this debugger so be careful
 #with the other ones, which are used by the debugger
 
@@ -29,6 +29,7 @@ set ::___zz___(lg-skip) [linsert [info global] end ___zz___] ;# skip initial sys
 set ::___zz___(skips) 0 	    ;# the number of breakpoints to skip, set here to avoid an info exist test, do not change, internal use only
 set ::___zz___(cb1) 0   		;# the global wide breakpoint disable flag, set it here so we don't have to check for existance later
 set ::___zz___(level) 0   		;# 
+set ::___zz___(delay) 0   		;# debugging delay times to slow down what's going on
 
 set ::___zz___(vw+) "vw+" 		;# the name of the vw+ proc (can perhaps change these if desired, both here and any aliases)
 set ::___zz___(go+) "go+" 		;# the name of the go+ proc 
@@ -36,17 +37,22 @@ set ::___zz___(bp+) "bp+" 		;# the name of the bp+ proc
 set ::___zz___(lbp+) "lbp+" 	;# the name of the lbp+ proc
 set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to use apply, would make the callback look too ugly
  
-#proc wait { ms } {
+# fixed some quoting difficulties, had to use our global array to copy some difficult text into the namespace for local variables
+# then we can copy the locals using a variable instead of trying to add backslashes all over the place, don't like it, but it seems
+# to be working. Glad this is still a local thing on github, nobody is using this yet besides me.
+#
+# added an entry trace on the instrumented proc so we can remove any previous namespace copy of the local variables
+# and -revert doesn't have to delete the trace, since revert redefines the proc and that removes any traces
+# a subsequent re-instrument will put it back
+# if the user calls instrument+ but doesn't do the eval, we won't get a new trace, and we'll insist on another revert, eh that's no biggy 
+#
+#proc wait { ms } { ;# a wait for use to debug the debugger
 #	set uniq [incr ::__sleep__tmp__counter]
 #	set ::__sleep__tmp__$uniq 0
 #	after $ms set ::__sleep__tmp__$uniq 1
 #	vwait ::__sleep__tmp__$uniq
 #	unset ::__sleep__tmp__$uniq
 #}
-# fixed some quoting difficulties, had to use our global array to copy some difficult text into the namespace for local variables
-# then we can copy the locals using a variable instead of trying to add backslashes all over the place, don't like it, but it seems
-# to be working. Glad this is still a local thing on github, nobody is using this yet besides me.
-
 #   --------------------------------------------------------------------
 #   This is a collection of procedures to be sourced into a new program
 #   They make up a simple debugging system for global
@@ -478,12 +484,31 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 #		puts stderr "does exist $w, so let's see what we do have, next does the destroys"
 #		vwait ::fff
 		set children [winfo children $w]
+		set got1 1
+		set the_ns ""
 		foreach child $children {
 #			puts "child= |$child|  [winfo class $child] should maybe destroy him  = [expr {[winfo class $child] ne "Frame"}]"
 			if { [winfo class $child] ne "Frame" } { ;# kill all the labels and entries, but take the canoli - uh I mean keep the buttons etc.
+				set splitwidget [split $child .]
+				if { $got1 } {
+					set got1 0
+#					puts "destroy child= |$child|  /::[lindex $splitwidget 1]/  $splitwidget"
+					set the_ns [lindex $splitwidget 1]
+				}
+#				wait $::___zz___(delay)
 				destroy $child
 			}	
 		}
+		# need to delete the namespace here
+#		puts "w= |$w|  about to delete -----   $the_ns   -------------"
+#		namespace delete $the_ns
+
+		
+		
+		
+		
+		
+		
 #		puts "(not) waiting at fff again"
 #		vwait ::fff
 	}
@@ -508,6 +533,7 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 	
 	set n 0
 	foreach ii [lsort -dictionary $argsn] {
+#		wait $::___zz___(delay)
 		set i [lindex $ii 0]
 		set j [lindex $ii 1]
 #		puts " n=$n   ii= [format %30s |$ii|] i= |$i| j= |$j|" ; update ; wait 5000
@@ -874,6 +900,34 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			
 		}
 		$w config -font "$font $size"
+	} elseif { $func eq "tracer" } { 	;# this is used to clear the namespace for the proc, 
+										;# clearing vars so next time in we start over, internal call only
+#		puts stderr "in tracer args= |$args| "
+		set prc [lindex  $args 0 0] ;# get the proc name from the trace input
+		set zzz [namespace exist _$prc] ;# first time a proc is called there's no namespace to clear up
+#		puts stderr "zzz= |$zzz| args= |$args| prc= |$prc| "
+		if { $zzz } {
+#			puts before-wait-1000
+#			wait 1000
+#			puts stderr "do-namespace-delete _$prc "
+			if [catch {
+				namespace delete _$prc
+			} err_code] {
+				puts $err_code 
+			}
+#			puts after-delete
+#			wait 1000
+#			puts after-wait-1000
+		}
+	
+	} elseif { $func eq "names" } { #set the delay factor for debugging
+		set  ns  [lindex $args 0]
+		set  var [lindex $args 1]
+		puts "lookup in namespace $ns, the var $var"
+		return [namespace eval $ns [list namespace which -variable $var]]
+	} elseif { $func eq "delay" } { #set the delay factor for debugging
+		puts stderr "set delay to [lindex $args 0]"
+		set ::___zz___(delay) [lindex $args 0]
 	} elseif { $func eq "clean" } { #close all vw+ windows, from the ___zz___(vws) list
 		foreach window $::___zz___(vws) {
 			puts "close window= |$window| "
@@ -1096,7 +1150,7 @@ if [catch {
 		button .lbp_console.bframe.b4    -text "Font ++" -command [list $::___zz___(util+) fontsize .lbp_console.cframe.text 1] ;# -image $image ;#
 		button .lbp_console.bframe.b5    -text "Console" -command {catch {console show}} ;# -image $image ;#
 		button .lbp_console.bframe.b6    -text "0 Skips" -command {set ::___zz___(skips) 1} ;# -image $image ;#
-		button .lbp_console.bframe.b7    -text "spare" -command {} ;# -image $image ;#
+		button .lbp_console.bframe.b7    -text "Go" -command [list $::___zz___(go+)]  ;# -image $image ;#
 		
 
 		
@@ -1230,8 +1284,13 @@ proc instrument+ {procedure args} {
 	}
 	if { [lsearch "-revert" $args] >= 0 } {  
 		if { [info exists  ::___zz___(original,$procedure)] } {
-			eval $::___zz___(original,$procedure)
+			eval $::___zz___(original,$procedure) ;# this automatically removes the trace, so we need not do it ourselves
 			unset ::___zz___(original,$procedure) ;# remove this so it will fail if user tries it twice
+#			set zzz [trace info execution $procedure]
+#			puts "zzz= |$zzz| 1"
+#			trace remove execution $procedure enter [list $::___zz___(util+) tracer]
+#			set zzz [trace info execution $procedure]
+#			puts "zzz= |$zzz| 2"
 		} else {
 			error "cannot find an original to revert to for $procedure"
 		}
@@ -1349,5 +1408,7 @@ proc instrument+ {procedure args} {
 		
 		append out "$line $instrument\n"
 	}
+#	puts "procedure= |$procedure| "
+	append out "trace add execution $procedure enter \{$::___zz___(util+) tracer\}\n"
 	return $out
 }
