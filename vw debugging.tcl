@@ -1,5 +1,5 @@
 #proc (just an aid to my editor for text folding)
-# this is version .004 :)
+# this is version .005 :)
 #these array indices, serve as a configuration for this debugger so be careful
 #with the other ones, which are used by the debugger
 
@@ -7,12 +7,14 @@
 # C O N N F I G U R A T I O N begin
 # ---------------------------------
 
-set ::___zz___(proc_wid) 15 	;# the number of lines to show on either side of a breakpoint line
+set ::___zz___(proc_wid) 15 		;# the number of lines to show on either side of a breakpoint line
 set ::___zz___(auto_list_default) 1 ;# this sets the auto list checkbox to this value at first creation of checkbox
 set ::___zz___(console_hack) 1      ;# if 1, installs a console hack to allow an empty <cr> line on console, repeats last command (handy for go+)
 set ::___zz___(use_ttk) 0           ;# if 1, the windows use the themed ttk
 set ::___zz___(max_size) 3000   	;# the maximum size of a variable, for safety, also if the variable does not yet exist, we can't monitor it
+set ::___zz___(skip_modulo) 100    	;# when using a large skip count on go+ this is the number of steps between reporting remaining messages
 #set ::___zz___(bwidget) 0 ;# uncomment this if BWidgets are not wanted, leave undefined and it will try to use it (do not set to 1 here)
+
 
 interp alias {} v {} vw+ ;# shorthands since we might be typing these, optional
 interp alias {} g {} go+
@@ -37,6 +39,7 @@ set ::___zz___(bp+) "bp+" 		;# the name of the bp+ proc
 set ::___zz___(lbp+) "lbp+" 	;# the name of the lbp+ proc
 set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to use apply, would make the callback look too ugly
  
+# added a leave trace as well where the -bg of the text widget is set to a shade of yellow, and on the entry it's back to white
 # fixed some quoting difficulties, had to use our global array to copy some difficult text into the namespace for local variables
 # then we can copy the locals using a variable instead of trying to add backslashes all over the place, don't like it, but it seems
 # to be working. Glad this is still a local thing on github, nobody is using this yet besides me.
@@ -794,7 +797,7 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 #$::___zz___(bp+)
 proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed in from lbp+ from the windows checkbox options
 	if { $::___zz___(level) > 0} {
-		puts stderr "no recursive breakpoints allowed, ignoring"
+		puts stderr "no recursive breakpoints allowed, ignoring, level = $::___zz___(level)"
 		return
 	}
 	if { $::___zz___(cb1) || $nobreak} {
@@ -803,10 +806,10 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 	if { ![info exist ::___zz___(vws)] } {
 		set ::___zz___(vws) [list]
 	}
-	if {   ($::___zz___(skips)  <= 0)   ||  (  ( $::___zz___(skips)% 50 ) == 0    )       } {
-#		puts "mod 50, so do nothing here = $::___zz___(skips) "
+	if {   ($::___zz___(skips)  <= 0)   ||  (  ( $::___zz___(skips)% $::___zz___(skip_modulo) ) == 0    )       } {
+#		puts "mod skip_modulo, so do nothing here = $::___zz___(skips) " ;# used to be a constant 50, now a configuration variable
 	} else {
-#		puts "mod 50 get out quick       = $::___zz___(skips) "
+#		puts "mod skip_modulo get out quick       = $::___zz___(skips) "
 		incr ::___zz___(skips) -1
 		if { ! $nomessage } {
 			if { $::___zz___(skips) > 0 } {
@@ -900,8 +903,21 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			
 		}
 		$w config -font "$font $size"
+	} elseif { $func eq "tracerend" } { 	;# this is used at the end of a proc
+#		puts stderr "in tracerend args= |$args| "
+		if [catch {
+					.lbp_console.cframe.text configure -bg {#ffffc0}
+		} err_code] {
+			puts $err_code 
+		}
+	 	return
 	} elseif { $func eq "tracer" } { 	;# this is used to clear the namespace for the proc, 
 										;# clearing vars so next time in we start over, internal call only
+		if [catch {
+					.lbp_console.cframe.text configure -bg white
+		} err_code] {
+			puts $err_code 
+		}
 #		puts stderr "in tracer args= |$args| "
 		set prc [lindex  $args 0 0] ;# get the proc name from the trace input
 		set zzz [namespace exist _$prc] ;# first time a proc is called there's no namespace to clear up
@@ -920,7 +936,7 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 #			puts after-wait-1000
 		}
 	
-	} elseif { $func eq "names" } { #set the delay factor for debugging
+	} elseif { $func eq "names" } { #
 		set  ns  [lindex $args 0]
 		set  var [lindex $args 1]
 		puts "lookup in namespace $ns, the var $var"
@@ -928,6 +944,9 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 	} elseif { $func eq "delay" } { #set the delay factor for debugging
 		puts stderr "set delay to [lindex $args 0]"
 		set ::___zz___(delay) [lindex $args 0]
+	} elseif { $func eq "smod" } { #set the skip modulo
+		puts stderr "set skip modulo to [lindex $args 0]"
+		set ::___zz___(skip_modulo) [lindex $args 0]
 	} elseif { $func eq "clean" } { #close all vw+ windows, from the ___zz___(vws) list
 		foreach window $::___zz___(vws) {
 			puts "close window= |$window| "
@@ -940,9 +959,10 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		if { $namepat eq "" } {
 			error "wrong number of args: should be $::___zz___(util+) lp procedure-name"
 		}
+if { 00 } {
 		foreach proc [info procs $namepat] {
 			set space ""
-			puts -nonewline "---------------------\nproc $proc {"
+			puts -nonewline "#---------------------\nproc $proc {"
 				foreach arg [info args $proc] {
 					if [info default $proc $arg value] {
 						puts -nonewline "$space{$arg $value}"
@@ -957,12 +977,40 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 				puts -nonewline  [info body $proc]
 			puts "}"
 		}
-			
+}
+		
+			# let's use the functional version of this	, leaving my orginal above	
+			set proc [lindex $args 0]
+		
+			set result ""
+			set space ""
+			set result "proc $proc \{"
+			foreach arg [info args $proc] {
+				if [info default $proc $arg value] {
+					append result "$space{$arg $value}"
+				} else {
+					append result $space$arg
+				}
+				set space " "
+			}
+			append result "\} \{"
+			append result [info body $proc]
+			append result "\}\n"
+			return $result
+		
 
+	} elseif { $func eq "?" } {
+		puts "util+ help: "
+		puts "     lp <procedure>       display the current code for a proc "
+		puts "     smod    #            set the modula for reporting on skiping (now $::___zz___(skip_modulo))"
+		puts "     clean                close all the data windows #= [llength $::___zz___(vws)]"
+#		puts "     util+ help: "
+#		puts "     util+ help: "
+#		puts "     util+ help: "
 	} elseif { $func eq "stuff" } {
 		dothis-stuff
 	} else {
-		error "invalid util+ function, should be one of lp, fontsize"
+		error "invalid util+ function, should be one of lp, fontsize, smod, clean, ... or ?"
 	}
 }
 #$::___zz___(lbp+)
@@ -970,10 +1018,10 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 	if { $::___zz___(cb1) } { ;# get out quickly if no breakponts, also don't update values
 		return
 	}
-	if {   ($::___zz___(skips)  <= 0)   ||  (  ( $::___zz___(skips)% 50 ) == 0    )       } {
-#		puts "MOD 50, so do nothing here = $::___zz___(skips) "
+	if {   ($::___zz___(skips)  <= 0)   ||  (  ( $::___zz___(skips)% $::___zz___(skip_modulo) ) == 0    )       } {
+#		puts "MOD skip_modulo, so do nothing here = $::___zz___(skips) "
 	} else {
-#		puts "MOD 50 get out quick       = $::___zz___(skips) "
+#		puts "MOD skip_modulo get out quick       = $::___zz___(skips) "
 		incr ::___zz___(skips) -1
 		incr ::___zz___(bpnum)
 		return
@@ -1249,7 +1297,7 @@ if [catch {
 		set nsvar "::${ns}::${var}" ;# the variable our namespace, so we can push it back to the locals
 		set comment_it_out ""
 		if { $var eq "args" } {
-			set comment_it_out "#" ;# don't think it's a good idea to have the user change args, maybe we will change our minds
+#			set comment_it_out "#" ;# don't think it's a good idea to have the user change args, maybe we will change our minds
 		}
 		if { $arr } {
 			append	ncmd "#array set $var \{() $nsvar\} ...\n" ;# here is where would could someday support local array variables
@@ -1410,5 +1458,6 @@ proc instrument+ {procedure args} {
 	}
 #	puts "procedure= |$procedure| "
 	append out "trace add execution $procedure enter \{$::___zz___(util+) tracer\}\n"
+	append out "trace add execution $procedure leave \{$::___zz___(util+) tracerend\}\n"
 	return $out
 }
