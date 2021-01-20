@@ -1,5 +1,5 @@
 #proc (just an aid to my editor for text folding)
-# this is version .005 :)
+# this is version .006 :)
 #these array indices, serve as a configuration for this debugger so be careful
 #with the other ones, which are used by the debugger
 
@@ -32,6 +32,8 @@ set ::___zz___(skips) 0 	    ;# the number of breakpoints to skip, set here to a
 set ::___zz___(cb1) 0   		;# the global wide breakpoint disable flag, set it here so we don't have to check for existance later
 set ::___zz___(level) 0   		;# 
 set ::___zz___(delay) 0   		;# debugging delay times to slow down what's going on
+set ::___zz___(goto) -1   		;# debugging goto line number
+set ::___zz___(bpnum) 0
 
 set ::___zz___(vw+) "vw+" 		;# the name of the vw+ proc (can perhaps change these if desired, both here and any aliases)
 set ::___zz___(go+) "go+" 		;# the name of the go+ proc 
@@ -39,6 +41,24 @@ set ::___zz___(bp+) "bp+" 		;# the name of the bp+ proc
 set ::___zz___(lbp+) "lbp+" 	;# the name of the lbp+ proc
 set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to use apply, would make the callback look too ugly
  
+
+# reminder to self, get the code out of the step trace debugger (the forerunner to this) which will
+# create an entry box in the code window to use as a mini-console, with command history and the enter
+# key to repeat, then won't need the console hack, which is not as clean as I'd like it
+# maybe, just maybe, pull in the code that would use color to indicate when a variable changed it's value
+# between breakpoints. However, that was always slow, so not sure it's really worth it. Time to update pdf
+# and take a rest.
+# .006 
+# added the g -N command (triggered also by a double click on a line number), an animated go to a line
+# where you can see the line number moving rapidly and variables updating quickly, however, it does not
+# yet verify you are still in the same proc, so go to line -30, and if you have instrumented another proc
+# and you call it from the first, it will stop on that line number w/o checking it's the same proc as where
+# you issued the command (a todo item)
+#
+# cleaned up the breakpoint number so that g N (positive value) can be more reliably used to implement a
+# with a program restart to get to the same point, (or just before it) assuming code repeats exactly, 
+# implements a sort of run backwards ability :)
+# 
 # added a leave trace as well where the -bg of the text widget is set to a shade of yellow, and on the entry it's back to white
 # fixed some quoting difficulties, had to use our global array to copy some difficult text into the namespace for local variables
 # then we can copy the locals using a variable instead of trying to add backslashes all over the place, don't like it, but it seems
@@ -796,11 +816,22 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 } ;# addapted from the original idea by RS
 #$::___zz___(bp+)
 proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed in from lbp+ from the windows checkbox options
+#	puts stderr "goto vs. line :  $::___zz___(goto)   [expr {(    $::___zz___(lbp+,line) +1   )}]"
+	set stophere 0
+	if { $::___zz___(goto) >= 0 } {
+		if { [expr {(   $::___zz___(lbp+,line) + 1    )}] ==  $::___zz___(goto) } {
+			set stophere 1	
+			set ::___zz___(goto) -1	
+		}
+	} else {
+		set stophere 1
+	}
 	if { $::___zz___(level) > 0} {
 		puts stderr "no recursive breakpoints allowed, ignoring, level = $::___zz___(level)"
 		return
 	}
 	if { $::___zz___(cb1) || $nobreak} {
+		incr ::___zz___(bpnum)
 		return
 	}
 	if { ![info exist ::___zz___(vws)] } {
@@ -817,10 +848,10 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 			} else {
 				set taco ""
 			}
-			puts stderr "BReakpoint  [incr ::___zz___(bpnum)] :  $message"
+			puts stderr "BReakpoint   [expr {(   $::___zz___(bpnum) + 1   )}]  :  $message"
 			update
 		}
-		
+		incr ::___zz___(bpnum)
 		return
 	}
 	foreach vwindow $::___zz___(vws) {
@@ -848,6 +879,8 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 		puts stderr "Breakpoint  [incr ::___zz___(bpnum)] :  $message $taco "
 		update 
 #		flush stdout ; update ;# needed here?
+	} else {
+		incr ::___zz___(bpnum)
 	}
 	if { $nomessage } {
 		set ::___zz___(bp) 2 ;# indicate we are waiting for it to change but don't want
@@ -858,7 +891,8 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 		incr ::___zz___(skips) -1
 		set nobreak 1
 	}
-	if { ! $nobreak } {
+#	puts stderr "line is [expr {(   $::___zz___(lbp+,line) + 1   )}]"
+	if { ! $nobreak && $stophere} {
 		incr ::___zz___(level)
 		vwait ::___zz___(bp) ;# pause until this is set again
 		incr ::___zz___(level) -1
@@ -868,12 +902,16 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 	}
 }
 proc $::___zz___(go+) {{skip -1} {window ""}} {
+	if { $skip < -1 } {
+		set ::___zz___(goto) [expr {(   0 - $skip   )}]
+		set skip -1
+	}
 	if { $skip > 0 } {
 		set ::___zz___(skips) [expr {(   $skip - 1   )}]
 	}
 	set ::___zz___(go-window) $window ;# not really using this anymore, but lets keep it anyway
 	if {![info exists ::___zz___(bp)] ||  ($::___zz___(bp) == 1) } {
-		puts stderr "Not currently waiting at a breakpoint"
+		puts stderr "Not currently waiting at a breakpoint after $::___zz___(bpnum) steps"
 		set ::___zz___(bp) 1 ;# set it regardless
 	} elseif {![info exists ::___zz___(bp)] ||  ($::___zz___(bp) == 2)} {
 		set ::___zz___(bp) 2 ;# set it so we continue
@@ -903,12 +941,24 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			
 		}
 		$w config -font "$font $size"
+	} elseif { $func eq "double-click" } { 	;# this is used at the end of a proc
+#		puts "binding doubleclick text : args= |$args| "
+		set selranges [.lbp_console.cframe.text tag ranges sel]
+#		puts "selranges= |$selranges| "
+		set selection [.lbp_console.cframe.text get {*}$selranges]
+#		puts "selranges= |$selranges| selection= |$selection| " 
+		if { [string is integer $selection] } {
+			tailcall $::___zz___(go+) "-[expr {(   abs($selection)   )}]"
+			return
+		} 
+		puts stderr "Invalid double click selecton, not a number: $selection"
+		return
 	} elseif { $func eq "tracerend" } { 	;# this is used at the end of a proc
 #		puts stderr "in tracerend args= |$args| "
 		if [catch {
 					.lbp_console.cframe.text configure -bg {#ffffc0}
 		} err_code] {
-			puts $err_code 
+			puts "setting to yellow: $err_code "
 		}
 	 	return
 	} elseif { $func eq "tracer" } { 	;# this is used to clear the namespace for the proc, 
@@ -916,11 +966,12 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		if [catch {
 					.lbp_console.cframe.text configure -bg white
 		} err_code] {
-			puts $err_code 
+#			puts "setting to white: $err_code "
 		}
 #		puts stderr "in tracer args= |$args| "
 		set prc [lindex  $args 0 0] ;# get the proc name from the trace input
 		set zzz [namespace exist _$prc] ;# first time a proc is called there's no namespace to clear up
+		after 300 [list wm title .lbp_console $prc]
 #		puts stderr "zzz= |$zzz| args= |$args| prc= |$prc| "
 		if { $zzz } {
 #			puts before-wait-1000
@@ -1016,6 +1067,7 @@ if { 00 } {
 #$::___zz___(lbp+)
 proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will create a window with local vars, id optional
 	if { $::___zz___(cb1) } { ;# get out quickly if no breakponts, also don't update values
+		incr ::___zz___(bpnum)
 		return
 	}
 	if {   ($::___zz___(skips)  <= 0)   ||  (  ( $::___zz___(skips)% $::___zz___(skip_modulo) ) == 0    )       } {
@@ -1053,6 +1105,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 		set show_instr 0	
 	}
 	if { [info exist ::___zz___(cb3,.$ns)]  && $::___zz___(cb3,.$ns)} {
+		incr ::___zz___(bpnum)
 		return
 	}
 	
@@ -1197,7 +1250,7 @@ if [catch {
 		button .lbp_console.bframe.b3    -text "Font --" -command [list $::___zz___(util+) fontsize .lbp_console.cframe.text -1] ;# -image $image ;#
 		button .lbp_console.bframe.b4    -text "Font ++" -command [list $::___zz___(util+) fontsize .lbp_console.cframe.text 1] ;# -image $image ;#
 		button .lbp_console.bframe.b5    -text "Console" -command {catch {console show}} ;# -image $image ;#
-		button .lbp_console.bframe.b6    -text "0 Skips" -command {set ::___zz___(skips) 1} ;# -image $image ;#
+		button .lbp_console.bframe.b6    -text "Break" -command {set ::___zz___(skips) 1;set ___zz___(goto) -1} ;# -image $image ;#
 		button .lbp_console.bframe.b7    -text "Go" -command [list $::___zz___(go+)]  ;# -image $image ;#
 		
 
@@ -1206,6 +1259,8 @@ if [catch {
 		pack .lbp_console.bframe  -side top -expand 0 -fill x
 		pack .lbp_console.cframe 	-side top -expand 1 -fill both
 		pack .lbp_console.cframe.text    -side left -expand 1 -fill both
+		bind .lbp_console.cframe.text  <Double-Button-1> [list after idle [list $::___zz___(util+) double-click %W %x %y]]
+#		bind .t   <Double-Button-1> [list after idle [list $foo double-click %W %x %y]]		
 		pack .lbp_console.cframe.y   -side right -expand 0 -fill y
 		
 		pack  .lbp_console.bframe.b1 .lbp_console.bframe.b2 .lbp_console.bframe.b3  .lbp_console.bframe.b4 .lbp_console.bframe.b5 .lbp_console.bframe.b6  .lbp_console.bframe.b7  -fill both -expand true -side left
@@ -1321,7 +1376,7 @@ proc instrument+ {procedure args} {
 # to use, do this:   eval [instrument+ procname]
 # after the proc has been defined, this will re-define it with debug code
 
-
+	set enable 1 ;# enable instrumenting
 #	set pcode [getproc $procedure]
 	set rbracket "\}"
 	set norb 0
@@ -1381,13 +1436,25 @@ proc instrument+ {procedure args} {
 	foreach line $lines {
 #		puts "line= |$line| "
 		incr ln
-		set tline [string trim $line]
+		regsub {[ \t];#[ \t].*$} $line {} tline
+		set tline [string trim $tline]
 		set ok [info complete $tline] ;# not sure exactly how this works, but if its not complete, we may not want to instrument it
 		# ok is now either 0 or 1, next we check for special cases and adjust ok based on that, but might just drop through
+		set enable_seen 0
 		if { [string index $tline 0] eq "#"} { ;# want to skip lines beginning with # so we don't step through comments
-			set ok 3 
-		} elseif {$tline eq ""} { ;# and don't want it for blank lines either
-			set ok 4
+			
+			if       { [string range $tline 0 7] eq  "#enable+" } {
+				set enable 1
+				set tline "" 
+#				set line ""
+				set enable_seen 1
+			} elseif { [string range $tline 0 8] eq  "#disable+" } {
+				set enable 0
+			}
+#			puts "enable= |$enable| tline= |$tline| "
+#			set ok 3 
+		} elseif {$tline eq ""} { ;# and don't want it for blank lines either 
+#			set ok 4
 		} elseif {[string index [string trim $tline] end] eq "\\"} { 
 			# this actually shouldn't happen, parser removes them in info body, and so our line numbers
 			# will also be correct if there's an error dialog, but we'll leave this code in anyway, wont hurt
@@ -1427,7 +1494,7 @@ proc instrument+ {procedure args} {
 		if       { $ok == 0 || $ok == 3 || $ok == 4 || $ok == 5 || $ok == 6} { ;# we only gave these differnt numbers for debugging use
 			set instrument "" ;# if incomplete or one blank lines, comment only, a return, and line continuation (but shouldn't see that here) 
 		} elseif { $ok == 2 || $ok == 1 } {
-			set id  
+			
 			set instrument ";lbp+ step-instrument $id" ;# here's what we append, note step-instrument is also looked for to strip these when listing code
 		} elseif { 0 } {
 			
@@ -1444,8 +1511,9 @@ proc instrument+ {procedure args} {
 		} else {
 #			set zzz [regsub  "([ \t]);##([ \t])" line {\1 $} ?varName?]
 			set zzz [regsub -nocase -linestop -lineanchor {([ \t])(;#+)([ \t])(?!.*")} $line "\\1$instrument\\3\\2 " result]
+#			puts "enable=$enable\nok= $ok\ntline = |$tline|\nline= |$line|\ninstrument= |$instrument|\nresult= |$result| \nzzz= |$zzz| \n"
 #			puts "zzz= |$zzz| result= |$result| "
-			if { $zzz == 1 } {
+			if { $zzz == 1 && $enable} {
 				set line $result
 				set instrument ""
 			}
@@ -1453,8 +1521,18 @@ proc instrument+ {procedure args} {
 				incr idn ;# if we are doing an instrument, incr in lower portion also, for debugging mostly
 			}
 		}
-		
-		append out "$line $instrument\n"
+		if { $enable } {
+#			puts "at the end enable= |$enable| "
+			if { $enable_seen } {
+				append out "$instrument ; $line \n"
+			} else {
+				append out "$line  $instrument\n"
+			}
+#			append out "$line $instrument\n"
+		} else {
+#			puts "NO the end enable= |$enable| "
+			append out "$line\n"	
+		}
 	}
 #	puts "procedure= |$procedure| "
 	append out "trace add execution $procedure enter \{$::___zz___(util+) tracer\}\n"
