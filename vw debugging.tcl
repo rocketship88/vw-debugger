@@ -41,7 +41,12 @@ set ::___zz___(bp+) "bp+" 		;# the name of the bp+ proc
 set ::___zz___(lbp+) "lbp+" 	;# the name of the lbp+ proc
 set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to use apply, would make the callback look too ugly
  
-
+# Now on lines that are just comments, we had been placing the instrumentation at the end,
+# which of course meant that it would not be executed, so the next statement following a comment
+# wouldn't have been stepped. We now modify that to be  (instru) ;# (astring1) (comment) ;# (astring2)
+# with 2 pretty much unique strings, which is so the instrument stipper used to display the text for
+# stepping can use a single regsub to extract just the comment (unless show-instr is set)
+#
 # reminder to self, get the code out of the step trace debugger (the forerunner to this) which will
 # create an entry box in the code window to use as a mini-console, with command history and the enter
 # key to repeat, then won't need the console hack, which is not as clean as I'd like it
@@ -82,8 +87,9 @@ set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to
 #   and namespace static variables and proc local dynamic variables.
 #
 #   Usage:
-#       1. setup the several configuration options below, if desired
-#       2. add a [source] of this file at the beginning of a program
+#       1. setup the several configuration options above, if desired
+#       2. add a [source] of this file at, say, the beginning of a program, or whenever, but before doing an instrument+
+#          it will save a list of all the current global variables, so the vw+ default (of **) will show only later globals
 #       3. place breakpoints in source code
 #          note, code outside procs use bp+ and inside procs lbp+, OO methods use only bp+
 #       4. optionally add single stepping using
@@ -223,7 +229,7 @@ set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to
 #      alt-left-click -> sort the list and display in a column on stdout (console)
 #   ----------------------------------------------------------------------
 
-
+# note: several procs in this file have variable names, to allow for easier changing of their names
 proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 
 	set me $::___zz___(vw+) ;# name of this procedure, used for recursion, callbacks, and help
@@ -1162,8 +1168,14 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 					}
 				}
 				if { ! $show_instr } {
-					set zzz 0
-					set zzz [regsub  {\;lbp\+ step\-instrument.*$} $line "" line]
+					set zzz [regsub -nocase -linestop -lineanchor -all {^.*;# instrument-show-begin(.*);# instrument-show-end$} $line {\1 (removed lbp+)} line]
+					if { $zzz <= 0 } {
+						# didn't match, so line comes out the same, so now just test for our instrumentation to hide, if did match, we extract original comment only
+						set zzz 0
+						set zzz [regsub  {\;lbp\+ step\-instrument.*$} $line "" line]
+					}
+
+
 #					puts "zzz= |$zzz| line= |$line| " 
 				}
 				append out "${cur}[format %4d [incr num]]\t$line\n"	
@@ -1526,7 +1538,13 @@ proc instrument+ {procedure args} {
 			if { $enable_seen } {
 				append out "$instrument ; $line \n"
 			} else {
-				append out "$line  $instrument\n"
+#				puts "    line= |$line| \n    instrument= |$instrument| \n"
+				set trline [string trimleft $line]
+				if { [string index $trline 0] eq "#"} {
+					append out "$instrument ;# instrument-show-begin $line ;# instrument-show-end\n"
+				} else {
+					append out "$line  $instrument\n"
+				}
 			}
 #			append out "$line $instrument\n"
 		} else {
