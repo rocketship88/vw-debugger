@@ -1,3 +1,18 @@
+Releae .007 nice number, and after this we will rest now
+
+Lots of new stuff. Some of my first debugger code is now in this one
+There's 2 new rows in the code stepping window, for typing in commands.
+the uplevel is not implemented yet, the other one is like a mini-console
+of one line, with up/down arrow, AND an empty line repeats last command
+the double clicking of line numbers is now a go to that line (slow enough
+to see it do it - we like that, can follow code in an animation)
+implemented as g -N and also now the break button, clears the g +/- N and
+should cause a stop immediately.
+If tooltip package is available, and the config says to use it, we'll try.
+The default for the console hack is now off, given the working 1 line console.
+the manual (pdf) has more info, but no new screenshots, I'm working on some
+videos with my new capture tool. Don't know if you can upload them here.
+
 Release .002 :)
 
 This version relaxes the entry max size on the proc source code.
@@ -5,16 +20,4 @@ since the default we are using was only 3000 chars, a 500 line
 proc might be nearly 30,000 so we'll use 10x for that one, otherwise
 most proc's text would have been too big. Dumping this out to the
 console is still quite fast since we use only one puts to do it.
-
-current known bugs:
-
-1. global variables defined in a local proc that are not yet defined
-cause problems
-2. second time calling a proc, we still have the namespace for the proc
-around need to clean it up, but we might have a problem with recursion 
-here too.
-
-lot's of quoting problems since we are generating code dynamically
-
-so, we're not really even an alpha yet :(
 

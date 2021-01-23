@@ -1,5 +1,5 @@
 #proc (just an aid to my editor for text folding)
-# this is version .006 :)
+# this is version .007 :) nice number, time to give this a rest for a while (nobody is using it but me anyway)
 #these array indices, serve as a configuration for this debugger so be careful
 #with the other ones, which are used by the debugger
 
@@ -7,12 +7,13 @@
 # C O N N F I G U R A T I O N begin
 # ---------------------------------
 
-set ::___zz___(proc_wid) 15 		;# the number of lines to show on either side of a breakpoint line
+set ::___zz___(proc_wid) 15         ;# the number of lines to show on either side of a breakpoint line
 set ::___zz___(auto_list_default) 1 ;# this sets the auto list checkbox to this value at first creation of checkbox
-set ::___zz___(console_hack) 1      ;# if 1, installs a console hack to allow an empty <cr> line on console, repeats last command (handy for go+)
+set ::___zz___(console_hack) 0      ;# if 1, installs a console hack to allow an empty <cr> line on console, repeats last command (handy for go+)
+set ::___zz___(tooltips) 1000       ;# if > 0 tooltip enabled and value=delay, if the package require fails, it will report and work w/o it, 0=don't use
 set ::___zz___(use_ttk) 0           ;# if 1, the windows use the themed ttk
-set ::___zz___(max_size) 3000   	;# the maximum size of a variable, for safety, also if the variable does not yet exist, we can't monitor it
-set ::___zz___(skip_modulo) 100    	;# when using a large skip count on go+ this is the number of steps between reporting remaining messages
+set ::___zz___(max_size) 3000       ;# the maximum size of a variable, for safety, also if the variable does not yet exist, we can't monitor it
+set ::___zz___(skip_modulo) 100     ;# when using a large skip count on go+ this is the number of steps between reporting remaining messages
 #set ::___zz___(bwidget) 0 ;# uncomment this if BWidgets are not wanted, leave undefined and it will try to use it (do not set to 1 here)
 
 
@@ -28,19 +29,21 @@ interp alias {} u {} util+
 #these statements are at global level, outside of all procs, and shouldn't be changed (unless you really know what you're doing)
 
 set ::___zz___(lg-skip) [linsert [info global] end ___zz___] ;# skip initial system set of globals, + this one
-set ::___zz___(skips) 0 	    ;# the number of breakpoints to skip, set here to avoid an info exist test, do not change, internal use only
-set ::___zz___(cb1) 0   		;# the global wide breakpoint disable flag, set it here so we don't have to check for existance later
-set ::___zz___(level) 0   		;# 
-set ::___zz___(delay) 0   		;# debugging delay times to slow down what's going on
-set ::___zz___(goto) -1   		;# debugging goto line number
+set ::___zz___(skips) 0         ;# the number of breakpoints to skip, set here to avoid an info exist test, do not change, internal use only
+set ::___zz___(cb1) 0           ;# the global wide breakpoint disable flag, set it here so we don't have to check for existance later
+set ::___zz___(level) 0         ;# 
+set ::___zz___(delay) 0         ;# debugging delay times to slow down what's going on
+set ::___zz___(goto) -1         ;# debugging goto line number
 set ::___zz___(bpnum) 0
 
-set ::___zz___(vw+) "vw+" 		;# the name of the vw+ proc (can perhaps change these if desired, both here and any aliases)
-set ::___zz___(go+) "go+" 		;# the name of the go+ proc 
-set ::___zz___(bp+) "bp+" 		;# the name of the bp+ proc
-set ::___zz___(lbp+) "lbp+" 	;# the name of the lbp+ proc
+set ::___zz___(vw+) "vw+"       ;# the name of the vw+ proc (can perhaps change these if desired, both here and any aliases)
+set ::___zz___(go+) "go+"       ;# the name of the go+ proc 
+set ::___zz___(bp+) "bp+"       ;# the name of the bp+ proc
+set ::___zz___(lbp+) "lbp+"     ;# the name of the lbp+ proc
 set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to use apply, would make the callback look too ugly
- 
+
+# .007
+# try package require tooltip (think this is Donal's code), if the config setting is set, if package require fails, report then ignore
 # Now on lines that are just comments, we had been placing the instrumentation at the end,
 # which of course meant that it would not be executed, so the next statement following a comment
 # wouldn't have been stepped. We now modify that to be  (instru) ;# (astring1) (comment) ;# (astring2)
@@ -48,8 +51,11 @@ set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to
 # stepping can use a single regsub to extract just the comment (unless show-instr is set)
 #
 # reminder to self, get the code out of the step trace debugger (the forerunner to this) which will
-# create an entry box in the code window to use as a mini-console, with command history and the enter
+#
+# create 2 entry boxes in the code window to use as a mini-console, with command history and the enter
 # key to repeat, then won't need the console hack, which is not as clean as I'd like it
+# --- done --- only the command entry, the uplevel one not yet implemented, but really close
+#
 # maybe, just maybe, pull in the code that would use color to indicate when a variable changed it's value
 # between breakpoints. However, that was always slow, so not sure it's really worth it. Time to update pdf
 # and take a rest.
@@ -947,6 +953,116 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			
 		}
 		$w config -font "$font $size"
+	} elseif { $func eq "enter-callback" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
+	
+		set n [lindex $args 0 ] ;# get the 3 arguments this ensemble has, n=1 or 2 for which entry box
+		set w [lindex $args 1 ] ;# the window for the entry (2 of them)
+		set key [lindex $args 2 ] ;# which key was typed, we handle enter (do the command) up/down for history
+	
+#		puts "func= |$func| n= |$n| w= |$w| key= |$key| args= |$args| "
+
+if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of it's own (ugly) command
+
+
+#.. proc ::___bp4g {n w key}  ;# callbacks for the entry widgets
+
+	set var [$w cget -textvariable] ;# name of the variable, not the value
+#	Putz "\nargs=  w and key |$w| |$key| var= |$var| n=$n val=[set $var]"
+	set max 10
+#	::___zz___(hnum,$n)     number 0..n for which one is next in list 0 = first
+#	::___zz___(history,$n)  history list
+	if { ! [info exist ::___zz___(history,$n)] } {
+		set ::___zz___(history,$n) [list]
+		set ::___zz___(hnum,$n) -1
+	}
+	if       { $key eq "Return" || $key eq "KP_Enter"} {
+		set val [set $var] ;# get the actual value
+		if { $val eq "" } {
+			set lastone [lindex $::___zz___(history,$n) 0 ] 
+#			Putz "empty, use last one, if any = $lastone"
+			if { $lastone eq "" } {
+				return
+			}
+#			Putz "empty, repeat $var"
+			set val $lastone ;# use the last one
+#			vwait forever
+		}
+		if { $n == 1 } { ;# which entry, 1 or 2, 1= do {...} 1
+#			Putz "before eval"
+			puts "do the command in an uplevel (eventually): /$val/"
+#			eval  "do \{$val\} 1"
+		} else {
+#			puts "do the command locally      : /$val/"
+			eval $val
+		}
+		$w delete 0 end ;# after doing it, we clear it out and reset hnum
+		set ::___zz___(hnum,$n) -1
+#		Putz "after eval val= |$val| "
+		if { $val ne  [lindex $::___zz___(history,$n) 0 ]   } {
+		 	
+			set ::___zz___(history,$n) [linsert $::___zz___(history,$n) 0 $val]
+			if { [llength $::___zz___(history,$n)] > $max } {
+				set ::___zz___(history,$n) [lrange $::___zz___(history,$n) 0 end-1]
+			}
+		 }
+#		la ::___zz___
+#		Putz "list $n = ( $::___zz___(history,$n) )"
+	} elseif {  $key eq "Up"  } {
+		if { [llength $::___zz___(history,$n) ] <= 0 } {
+			return
+		}
+		set num $::___zz___(hnum,$n)
+		incr num
+		if { $num < [llength $::___zz___(history,$n)]} {
+#			Putz " yes, $num < [llength $::___zz___(history,$n)]  do it"
+		} else {
+#			Putz " no,  $num < [llength $::___zz___(history,$n)] do nothing"
+			return
+		}
+		$w delete 0 end
+		set val [lindex $::___zz___(history,$n) $num ]
+		
+		$w insert 0 $val
+		incr ::___zz___(hnum,$n)
+#		Putz "new hnum = $::___zz___(hnum,$n)"
+#		Putz "list $n = ( $::___zz___(history,$n) )"
+
+	} elseif { $key eq "Down"  } {
+		if { [llength $::___zz___(history,$n) ] <= 0 } {
+			return
+		}
+		set num $::___zz___(hnum,$n)
+		incr num -1
+		if { $num < [llength $::___zz___(history,$n)] && $num >= 0} {
+#			Putz " yes, $num < [llength $::___zz___(history,$n)]  and $num >= 0  do it"
+		} else {
+#			Putz " no,  $num < [llength $::___zz___(history,$n)]  and $num >= 0  so do nothing"
+			$w delete 0 end ;# clear it out since there's no more, the next up will restore it
+			incr ::___zz___(hnum,$n) -1
+			if { $::___zz___(hnum,$n)  < 0} {
+				set ::___zz___(hnum,$n) -1
+			}
+			return
+		}
+		$w delete 0 end
+		set val [lindex $::___zz___(history,$n) $num ]
+		
+		$w insert 0 $val
+		incr ::___zz___(hnum,$n) -1
+#		Putz "new hnum = $::___zz___(hnum,$n)"
+#		Putz "list $n = ( $::___zz___(history,$n) )"
+		
+	} else {
+		
+	}
+	after 0 [list focus -force $w] ;#  make him active
+
+
+
+
+}
+
+	
 	} elseif { $func eq "double-click" } { 	;# this is used at the end of a proc
 #		puts "binding doubleclick text : args= |$args| "
 		set selranges [.lbp_console.cframe.text tag ranges sel]
@@ -977,7 +1093,7 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 #		puts stderr "in tracer args= |$args| "
 		set prc [lindex  $args 0 0] ;# get the proc name from the trace input
 		set zzz [namespace exist _$prc] ;# first time a proc is called there's no namespace to clear up
-		after 300 [list wm title .lbp_console $prc]
+		after 300 [list catch "wm title .lbp_console $prc"]
 #		puts stderr "zzz= |$zzz| args= |$args| prc= |$prc| "
 		if { $zzz } {
 #			puts before-wait-1000
@@ -1168,8 +1284,10 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 					}
 				}
 				if { ! $show_instr } {
+#					puts "line= |$line| " ;# when we used this debug puts, it slowed down long enough that the window didn't come up in time for the title change
 					set zzz [regsub -nocase -linestop -lineanchor -all {^.*;# instrument-show-begin(.*);# instrument-show-end$} $line {\1 (removed lbp+)} line]
-					if { $zzz <= 0 } {
+#					puts "zzz= |$zzz| line= |$line| \n" ; update
+					if { $zzz <= 0 || 1} { ;# let's do this all the time, shouldn't hurt, but I'll leave in the if test as a reminder
 						# didn't match, so line comes out the same, so now just test for our instrumentation to hide, if did match, we extract original comment only
 						set zzz 0
 						set zzz [regsub  {\;lbp\+ step\-instrument.*$} $line "" line]
@@ -1252,8 +1370,10 @@ if [catch {
 		
 		set font {Consolas 12}
 		toplevel .lbp_console
-		frame .lbp_console.bframe
-		frame .lbp_console.cframe
+		frame .lbp_console.bframe ;# frame with buttons
+		frame .lbp_console.cframe ;# frame with program text
+		
+
 		text  .lbp_console.cframe.text -height 25 -wrap none -font $font -tabs "[expr {4 * [font measure $font 0]}] left" -tabstyle wordprocessor -width 24 -yscrollcommand [list .lbp_console.cframe.y set]
 		scrollbar .lbp_console.cframe.y -orient vertical -command [list  .lbp_console.cframe.text yview]
 		
@@ -1265,11 +1385,40 @@ if [catch {
 		button .lbp_console.bframe.b6    -text "Break" -command {set ::___zz___(skips) 1;set ___zz___(goto) -1} ;# -image $image ;#
 		button .lbp_console.bframe.b7    -text "Go" -command [list $::___zz___(go+)]  ;# -image $image ;#
 		
+		set ::___zz___(entry1) ""
+		set ::___zz___(entry3) ""
 
+		frame .lbp_console.xframe ;# frame with command execute entry (I give up trying to get the buttons/entry to line up with the default font, so use a fixed size one)
+		button .lbp_console.xframe.lab3a -text "command:" -font {courier 10} -command {set ::___zz___(entry1) "";focus .lbp_console.xframe.entry } ;#-font {courier 14}
+		entry .lbp_console.xframe.entry -text "entry" -textvariable ::___zz___(entry1) -font {courier 14} ; #set ::___zz___(entry1) "set args"
+		bind  .lbp_console.xframe.entry <Key-Return> [list $::___zz___(util+) enter-callback 2 %W %K]
+		bind  .lbp_console.xframe.entry <Key-KP_Enter> [list $::___zz___(util+) enter-callback 2 %W %K]
+		bind  .lbp_console.xframe.entry <Key-Up> [list $::___zz___(util+) enter-callback 2 %W %K]
+		bind  .lbp_console.xframe.entry <Key-Down> [list $::___zz___(util+) enter-callback 2 %W %K]
+
+
+
+		frame .lbp_console.uframe ;# frame with uplevel command execute entry
+		button .lbp_console.uframe.lab3c -text "uplevel:"  -font {courier 10} -command {set ::___zz___(entry3) ""; focus .lbp_console.uframe.entry} ;#-font {courier 14} 
+		entry .lbp_console.uframe.entry -text "entry" -textvariable ::___zz___(entry3) -font {courier 14}
+		bind  .lbp_console.uframe.entry <Key-Return> [list $::___zz___(util+) enter-callback 1 %W %K]
+		bind  .lbp_console.uframe.entry <Key-KP_Enter> [list $::___zz___(util+) enter-callback 1 %W %K]
+		bind  .lbp_console.uframe.entry <Key-Up> [list $::___zz___(util+) enter-callback 1 %W %K]
+		bind  .lbp_console.uframe.entry <Key-Down> [list $::___zz___(util+) enter-callback 1 %W %K]
 		
 		
-		pack .lbp_console.bframe  -side top -expand 0 -fill x
-		pack .lbp_console.cframe 	-side top -expand 1 -fill both
+		pack .lbp_console.bframe  	-side top 	-expand 0 -fill x
+		pack .lbp_console.uframe    -side top  	-expand 0 -fill x
+		pack .lbp_console.xframe    -side top  	-expand 0 -fill x
+		
+		pack   .lbp_console.xframe.lab3a      	-side left -expand 0 -fill none
+		pack   .lbp_console.xframe.entry     	-side left -expand 1 -fill x 
+		
+		pack   .lbp_console.uframe.lab3c      	-side left -expand 0 -fill none
+		pack   .lbp_console.uframe.entry     	-side left -expand 1 -fill x 
+		
+		pack .lbp_console.cframe 	-side top 	-expand 1 -fill both
+		
 		pack .lbp_console.cframe.text    -side left -expand 1 -fill both
 		bind .lbp_console.cframe.text  <Double-Button-1> [list after idle [list $::___zz___(util+) double-click %W %x %y]]
 #		bind .t   <Double-Button-1> [list after idle [list $foo double-click %W %x %y]]		
@@ -1277,11 +1426,45 @@ if [catch {
 		
 		pack  .lbp_console.bframe.b1 .lbp_console.bframe.b2 .lbp_console.bframe.b3  .lbp_console.bframe.b4 .lbp_console.bframe.b5 .lbp_console.bframe.b6  .lbp_console.bframe.b7  -fill both -expand true -side left
 		if { [info exist ::___zz___(console_geom) ]} {
-			after 100 {wm geom .lbp_console {*}$::___zz___(console_geom) ; update}
-				puts "setting console geom $::___settings___(geomcon) "
+#			after 100 {wm geom .lbp_console {*}$::___zz___(console_geom) ; update}
+			puts "setting lbp console geom $::___zz___(console_geom) "
 		} else {
-			wm geom .lbp_console 1061x772+-1+185
+			wm geom .lbp_console 1061x804+-1+185
 		}
+		
+#		puts "check for tooltips"
+		
+		if { $::___zz___(tooltips) != 0 } {
+#			puts "try for tooltips"
+			if [catch {
+				package require tooltip
+				set delay 1000
+				if {       $::___zz___(tooltips) != 0} {
+					set delay  $::___zz___(tooltips)
+				} elseif {  $::___zz___(tooltips) == 0 } {
+					set delay 0
+				}
+#				puts "delay= |$delay| "
+				if { $delay > 0 } {
+#					puts "try to setup tooltips"
+					tooltip::tooltip delay $delay
+					tooltip::tooltip  .lbp_console.xframe.lab3a  "Clear the command entry"
+					tooltip::tooltip  .lbp_console.uframe.lab3c  "Clear the uplevel entry"
+
+					tooltip::tooltip .lbp_console.bframe.b1     "Clear the window"     
+					tooltip::tooltip .lbp_console.bframe.b2     "Scroll to Bottom of the window"    
+					tooltip::tooltip .lbp_console.bframe.b3     "Smaller font"   
+					tooltip::tooltip .lbp_console.bframe.b4     "Larger font"   
+					tooltip::tooltip .lbp_console.bframe.b5     "Open the Console"   
+					tooltip::tooltip .lbp_console.bframe.b6     "Break - stop a go+ command, if running N breakpoints \nor running to line number"     
+					tooltip::tooltip .lbp_console.bframe.b7     "Go - one step"        
+				}
+			} err_code] {
+				puts "Tooltip error: $err_code" 
+				set ::___zz___(tooltips) 0
+			}
+		}
+		
 
 	} else {
 		if { $::___zz___(skips) <= 0 } {
