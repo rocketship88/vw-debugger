@@ -1,7 +1,7 @@
 #proc (just an aid to my editor for text folding)
 # this is version .007 :) nice number, time to give this a rest for a while (nobody is using it but me anyway)
 #these array indices, serve as a configuration for this debugger so be careful
-#with the other ones, which are used by the debugger
+#with the other ones, which are used by the debugger internally
 
 # ---------------------------------
 # C O N N F I G U R A T I O N begin
@@ -829,6 +829,13 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 #$::___zz___(bp+)
 proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed in from lbp+ from the windows checkbox options
 #	puts stderr "goto vs. line :  $::___zz___(goto)   [expr {(    $::___zz___(lbp+,line) +1   )}]"
+	if { $::___zz___(level) > 0} {
+		if { [incr  ::___zz___(level_message_count) ] > 10  } {
+			return
+		}
+		puts stderr "no recursive breakpoints allowed, ignoring, level = $::___zz___(level) / $::___zz___(level_message_count) "
+		return
+	}
 	set stophere 0
 	if { $::___zz___(goto) >= 0 } {
 		if { [expr {(   $::___zz___(lbp+,line) + 1    )}] ==  $::___zz___(goto) } {
@@ -837,10 +844,6 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 		}
 	} else {
 		set stophere 1
-	}
-	if { $::___zz___(level) > 0} {
-		puts stderr "no recursive breakpoints allowed, ignoring, level = $::___zz___(level)"
-		return
 	}
 	if { $::___zz___(cb1) || $nobreak} {
 		incr ::___zz___(bpnum)
@@ -1188,6 +1191,13 @@ if { 00 } {
 }
 #$::___zz___(lbp+)
 proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will create a window with local vars, id optional
+	if { $::___zz___(level) > 0} {
+		if { [incr  ::___zz___(level_message_count) ] > 10  } {
+			return
+		}
+		puts stderr "no recursive breakpoints allowed, ignoring, level = $::___zz___(level) / $::___zz___(level_message_count) "
+		return
+	}
 	if { $::___zz___(cb1) } { ;# get out quickly if no breakponts, also don't update values
 		incr ::___zz___(bpnum)
 		return
