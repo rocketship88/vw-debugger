@@ -9,6 +9,7 @@
 
 set ::___zz___(proc_wid) 15         ;# the number of lines to show on either side of a breakpoint line
 set ::___zz___(auto_list_default) 1 ;# this sets the auto list checkbox to this value at first creation of checkbox
+set ::___zz___(bp_messages_default) 1 ;# this sets the no bp messages checkbox to this value at first creation of checkbox
 set ::___zz___(console_hack) 0      ;# if 1, installs a console hack to allow an empty <cr> line on console, repeats last command (handy for go+)
 set ::___zz___(tooltips) 1000       ;# if > 0 tooltip enabled and value=delay, if the package require fails, it will report and work w/o it, 0=don't use
 set ::___zz___(use_ttk) 0           ;# if 1, the windows use the themed ttk
@@ -35,6 +36,9 @@ set ::___zz___(level) 0         ;#
 set ::___zz___(delay) 0         ;# debugging delay times to slow down what's going on
 set ::___zz___(goto) -1         ;# debugging goto line number
 set ::___zz___(bpnum) 0
+set ::___zz___(delaya) 0		;# spinbox for delaying stepping animation
+set ::___zz___(waita) 0			;# variable to use for a vwait delay
+set ::___zz___(trace-level) 0	;# keep track of enter/leave so if we are in a lower level instrumented proc, we wait to turn it yellow on leave
 
 set ::___zz___(vw+) "vw+"       ;# the name of the vw+ proc (can perhaps change these if desired, both here and any aliases)
 set ::___zz___(go+) "go+"       ;# the name of the go+ proc 
@@ -43,6 +47,10 @@ set ::___zz___(lbp+) "lbp+"     ;# the name of the lbp+ proc
 set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to use apply, would make the callback look too ugly
 
 # .007
+#
+# Now includes a spinbox (with mousewheel binding) to set a delay factor when animating a run 0=none, up to 500 ms
+# can also enter a value, but if not a valid number, will reset the value to 0 (at the next break)
+#
 # try package require tooltip (think this is Donal's code), if the config setting is set, if package require fails, report then ignore
 # Now on lines that are just comments, we had been placing the instrumentation at the end,
 # which of course meant that it would not be executed, so the next statement following a comment
@@ -493,8 +501,8 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 				after 100 "set ::___zz___(cb3,$ww) 0" ;# for local breakpoints, we include the window name so this is window specific breakpoint disabling
 			}
 			if { ! [info exist ::___zz___(cb4,$ww)] } { ;# window may pre-exist, 
-				set ::___zz___(cb4,$ww)  0 ;# got to set it now, so we can use it below
-				after 100 "set ::___zz___(cb4,$ww) 0" ;# this disables the messages about stopping at a breakpoint, with user message, and then continuing
+				set ::___zz___(cb4,$ww)  $::___zz___(bp_messages_default) ;# got to set it now, so we can use it below
+				after 100 "set ::___zz___(cb4,$ww) $::___zz___(bp_messages_default)" ;# this disables the messages about stopping at a breakpoint, with user message, and then continuing
 			}
 			if { ! [info exist ::___zz___(cb5,$ww)] } { ;# window may pre-exist, 
 				set ::___zz___(cb5,$ww)  0 ;# got to set it now, so we can use it below
@@ -907,6 +915,17 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 		set nobreak 1
 	}
 #	puts stderr "line is [expr {(   $::___zz___(lbp+,line) + 1   )}]"
+	if { $::___zz___(delaya) > 0 } {
+		set ::___zz___(waita) 0
+		if [catch {
+					after $::___zz___(delaya) {set ::___zz___(waita) 1}
+				vwait ::___zz___(waita)
+		} err_code] {
+			puts stderr "probably bad delay, resetting to 0 : $err_code" 
+			set ::___zz___(delaya) 0
+		}
+#		puts "delayed $::___zz___(delaya) ms"
+	}
 	if { ! $nobreak && $stophere} {
 		incr ::___zz___(level)
 		vwait ::___zz___(bp) ;# pause until this is set again
@@ -1080,6 +1099,15 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 		return
 	} elseif { $func eq "tracerend" } { 	;# this is used at the end of a proc
 #		puts stderr "in tracerend args= |$args| "
+		
+		incr ::___zz___(trace-level) -1
+		if { $::___zz___(trace-level)  > 0} {
+			return
+		}
+		if { $::___zz___(trace-level)  < 0} {
+			set ::___zz___(trace-level) 0
+		}
+
 		if [catch {
 					.lbp_console.cframe.text configure -bg {#ffffc0}
 		} err_code] {
@@ -1093,6 +1121,7 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 		} err_code] {
 #			puts "setting to white: $err_code "
 		}
+		incr ::___zz___(trace-level)
 #		puts stderr "in tracer args= |$args| "
 		set prc [lindex  $args 0 0] ;# get the proc name from the trace input
 		set zzz [namespace exist _$prc] ;# first time a proc is called there's no namespace to clear up
@@ -1408,9 +1437,20 @@ if [catch {
 
 
 
-		frame .lbp_console.uframe ;# frame with uplevel command execute entry
-		button .lbp_console.uframe.lab3c -text "uplevel:"  -font {courier 10} -command {set ::___zz___(entry3) ""; focus .lbp_console.uframe.entry} ;#-font {courier 14} 
-		entry .lbp_console.uframe.entry -text "entry" -textvariable ::___zz___(entry3) -font {courier 14}
+		frame 		.lbp_console.uframe ;# frame with uplevel command execute entry
+		button 		.lbp_console.uframe.lab3c 	-text "uplevel:"  	-font {courier 10} -command {set ::___zz___(entry3) ""; focus .lbp_console.uframe.entry} ;#-font {courier 14} 
+		entry 		.lbp_console.uframe.entry 	-text "entry" 		-textvariable ::___zz___(entry3) -font {courier 14}
+		label		.lbp_console.uframe.label	-text "delay"
+		spinbox  	.lbp_console.uframe.sbox 	-from 0 			-to 500 	-increment 25  -textvariable ::___zz___(delaya) -width 4 -font {courier 14}
+		bind 		.lbp_console.uframe.sbox  <MouseWheel> {apply [list {spinner value} { 
+															#	puts "spinnera= |$spinner|   value= |$value| "
+																if { $value > 0 } {
+																	$spinner invoke buttonup
+																} else {
+																	$spinner invoke buttondown
+																}
+															} ] %W %D}															
+
 		bind  .lbp_console.uframe.entry <Key-Return> [list $::___zz___(util+) enter-callback 1 %W %K]
 		bind  .lbp_console.uframe.entry <Key-KP_Enter> [list $::___zz___(util+) enter-callback 1 %W %K]
 		bind  .lbp_console.uframe.entry <Key-Up> [list $::___zz___(util+) enter-callback 1 %W %K]
@@ -1426,6 +1466,8 @@ if [catch {
 		
 		pack   .lbp_console.uframe.lab3c      	-side left -expand 0 -fill none
 		pack   .lbp_console.uframe.entry     	-side left -expand 1 -fill x 
+		pack   .lbp_console.uframe.label     	-side left -expand 0 -fill none 
+		pack   .lbp_console.uframe.sbox     	-side left -expand 0 -fill none 
 		
 		pack .lbp_console.cframe 	-side top 	-expand 1 -fill both
 		
@@ -1467,7 +1509,8 @@ if [catch {
 					tooltip::tooltip .lbp_console.bframe.b4     "Larger font"   
 					tooltip::tooltip .lbp_console.bframe.b5     "Open the Console"   
 					tooltip::tooltip .lbp_console.bframe.b6     "Break - stop a go+ command, if running N breakpoints \nor running to line number"     
-					tooltip::tooltip .lbp_console.bframe.b7     "Go - one step"        
+					tooltip::tooltip .lbp_console.bframe.b7     "Go - one step" 
+					tooltip::tooltip .lbp_console.uframe.sbox	"Amount to delay in MS between break-points\nused when a g +/- is active to slow program\nfor better animated viewing - can adjust \nwith mousewheel or enter a valid integer"       
 				}
 			} err_code] {
 				puts "Tooltip error: $err_code" 
