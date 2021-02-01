@@ -274,7 +274,7 @@ set ::___zz___(util+) "util+"   ;# the name of the font adjuster, didn't want to
 #      alt-left-click -> sort the list and display in a column on stdout (console)
 #   ----------------------------------------------------------------------
 
-if { 1 } { ;# only for debugging
+if { 0 } { ;# only for debugging
 proc wait { ms } {
 	set uniq [incr ::__sleep__tmp__counter]
 	set ::__sleep__tmp__$uniq 0
