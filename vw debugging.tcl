@@ -10,7 +10,7 @@
 
 set ::___zz___(proc_wid) 15         ;# the number of lines to show on either side of a breakpoint line
 set ::___zz___(auto_list_default) 1 ;# this sets the auto list checkbox to this value at first creation of checkbox
-set ::___zz___(bp_messages_default) 1 ;# this sets the no bp messages checkbox to this value at first creation of checkbox
+set ::___zz___(bp_messages_default) 0 ;# this sets the no bp messages checkbox to this value at first creation of checkbox
 set ::___zz___(console_hack) 0      ;# if 1, installs a console hack to allow an empty <cr> line on console, repeats last command (handy for go+)
 set ::___zz___(tooltips) 1000       ;# if > 0 tooltip enabled and value=delay, if the package require fails, it will report and work w/o it, 0=don't use
 set ::___zz___(use_ttk) 0           ;# if 1, the windows use the themed ttk
@@ -1124,25 +1124,35 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 						set up		[uplevel [expr {(   0-$m   )}] info frame $m]
 						set vars	[uplevel [expr {(   0-$m   )}] info vars]
 #						puts "m= |$m| up= |$up| \nvars: $vars"
-						if { [dict exists $up proc ] } {
-							set prc [dict get $up proc]
+						if { [dict exists $up "proc" ] } {
+							set prc [dict get $up "proc"]
 #							puts "prc= |$prc| m=$m"
 							if { $prc ne "::$::___zz___(lbp+)" && $prc ne "::$::___zz___(bp+)"} {
 								set ok [expr {(   abs($m + 1)   )}]
-#								puts "found him at level - $m  => $ok"
+#								puts "found proc at level - $m  => $ok"
+								break
+							}
+						} elseif { [dict exists $up "method" ] } {
+							set prc [dict get $up "method"]
+#							puts "method= |$prc| m=$m"
+							if { $prc ne "::$::___zz___(lbp+)" && $prc ne "::$::___zz___(bp+)"} {
+								set ok [expr {(   abs($m + 1)   )}]
+#								puts "found method at level - $m  => $ok"
 								break
 							}
 						}
 					}
 #					puts "ok= |$ok| " 
 					if [catch {
-#						set ok2 [uplevel $ok info vars]   ;# $::___zz___(queued_cmd)
+						set ok2 [uplevel $ok info vars]   ;# $::___zz___(queued_cmd)
 #						puts "ok2= |$ok2| "
 						set ok2 [uplevel $ok $::___zz___(queued_cmd)]   ;# alright do it in his level
-						puts stderr "result from uplevel: $ok2"
+						puts -nonewline stderr "result from uplevel: " 
+						puts "$ok2"
 #						puts "ok2= |$ok2| "
 					} err_code] {
-						puts "error on uplevel $ok $err_code"
+						puts -nonewline stderr "error on uplevel $ok "
+						puts $err_code
 					}
 #					puts "up 1 [uplevel 1 info vars]"
 #					puts "up 2 [uplevel 2 info vars]"
@@ -1585,23 +1595,72 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 #	puts "frm_dict= |$frm_dict| "
 	set proc_name ""
 	set zzz [dict exists $frm_dict proc]
+	set amethod 0
 	if { $zzz == 0 } {
-		puts "this is not a proc"
+#		puts "\n---------------this is not a proc--------------"
 		set zzz [dict exists $frm_dict method]
 		if { $zzz } {
-			puts "its a method, not a proc"
+#			puts "its a method, not a proc zzz= |$zzz| frm_dict= |$frm_dict| level= |$level| "
+			set class [dict get $frm_dict class]
+			set method [dict get $frm_dict method]
+			set cmd [dict get $frm_dict cmd]
+#			puts "class= |$class| method= |$method| cmd= |$cmd| "
+			if       { $method eq "<constructor>" } {
+				set code [info class constructor $class]
+#				puts "its a constructor"
+			} elseif { $method eq "<destructor>" } {
+				set code [info class destructor $class]
+#				puts "its a destructor"
+			} else {
+				if [catch {
+					set code [info class definition $class $method]
+				} err_code] {
+					puts $err_code 
+					vwait forever
+				}
+			}
+			
+			
+#			puts "code= |$code| "
+			set args [lindex $code 0]
+			set body [lindex $code 1]
+			set vars [uplevel 1 {info vars}]
+			set myself [uplevel 1 {self}]
+			set call [info class call $class $method]
+#			puts "args= |$args| \nbody= |$body| \nvars= |$vars| \ncall= |$call| \nmyself= |$myself| "
+			set the_method "method $method \{$args\} \{ $body \}"
+#			puts "the_method= |$the_method| "
+			if { 0 } {
+				foreach var $vars {
+					if [catch {
+						set val [uplevel 1 set $var]
+						puts "   var= |$var| val= |$val| "	
+					} err_code] {
+						puts "---error for var= $var -> $err_code "
+					}
+				}
+			}
+			set amethod 1
+#			return
 		} else {
-			puts "its neither a method or a proc"	
+			puts "its neither a method or a proc"
+			return	
 		}
-		return
 	}
 		
+# ------------------------------------------------------  get proc_name and ns if a proc, if a method, we get the same info above ----------------------------------
+	if { $amethod } {
+#		puts "continue on a method"
+#		return
+		set proc_name $method
+		set ns _$proc_name
+	} else {
+		set proc_name [lindex [dict get $frm_dict proc] 0]
+	#	puts "proc_name= |$proc_name| frm_dict= |$frm_dict| level= |$level| " ; update
+		set ns [string map {{::} {_}} $proc_name]
+	}		
+#		puts "ns= |$ns| proc_name= |$proc_name| "
 # ------------------------------------------------------  setup to display instrumentation but one last escape for no local breakpoints here, but incr the count ---
-		
-	set proc_name [lindex [dict get $frm_dict proc] 0]
-#	puts "proc_name= |$proc_name| frm_dict= |$frm_dict| level= |$level| " ; update
-	set ns [string map {{::} {_}} $proc_name]
-#	puts "ns= |$ns| proc_name= |$proc_name| "
 	if { [info exist ::___zz___(cb5,.$ns)] } {
 		set show_instr $::___zz___(cb5,.$ns)
 	} else {
@@ -1622,25 +1681,32 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 # need some functions here, but don't want to polute the command name space any more
 		
 # ------------------------------------------------------- get_proc_code $proc_name --------------------------------------
-	set proc_def [apply {proc {
-	
-			set result ""
-			set space ""
-			set result "proc $proc \{"
-			foreach arg [info args $proc] {
-				if [info default $proc $arg value] {
-					append result "$space\{[list $arg $value]\}"
-				} else {
-					append result $space[list $arg]
+	if { $amethod } {
+#		puts "we have a method"
+		set proc_def $the_method
+		set proc_name $method
+#		return
+	} else {
+		set proc_def [apply {proc {
+		
+				set result ""
+				set space ""
+				set result "proc $proc \{"
+				foreach arg [info args $proc] {
+					if [info default $proc $arg value] {
+						append result "$space\{[list $arg $value]\}"
+					} else {
+						append result $space[list $arg]
+					}
+					set space " "
 				}
-				set space " "
-			}
-			append result "\} \{"
-			append result [info body $proc]
-			append result "\}\n"
-			return $result
-			
-	}} $proc_name]
+				append result "\} \{"
+				append result [info body $proc]
+				append result "\}\n"
+				return $result
+				
+		}} $proc_name]
+	}
 	
 # ------------------------------------------------------- insert line numbers and show or hide instrumentation commands ----------------------
 #   numberit {pdef string} 
@@ -1694,7 +1760,12 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 			
 	}} $proc_def $search_id $comment $show_instr]
 	
-
+#	if { $amethod } {
+#		puts "------ method $method begin ------"
+#		puts $proc_def
+#		puts "------ method $method end ------"
+#		return
+#	}
 # ------------------------------------------------------  get the list in the namespace to  compare to vars list      ------------------------
 
 	set winex 0
@@ -1712,7 +1783,8 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 				set ::___zz___(temp,0) [set $item]
 				set lvar [namespace tail $item]
 				if [catch {
-					set cmd "expr {\$::___zz___(temp,0)  ==  \$$lvar}"
+					set cmd "expr {\$::___zz___(temp,0)  == \$\{${lvar}\} } "    
+#					puts "cmd= |$cmd| lvar= |$lvar| "
 					set zzz [uplevel 1 $cmd  ]
 				} err_code] {
 					set zzz 0 ;#if we get an error, then just consider it to be different, so we call the full update 
@@ -1758,7 +1830,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 				set aval [uplevel 1 $cmd]
 				set ok 1
 			} err_code] {
-				puts "$err_code for $var, so skip it, is it a global and not defined yet?"
+#				puts "$err_code for $var, so skip it, is it a global and not defined yet?"
 				set ok 0
 			}
 			if { ! $ok } {
@@ -1786,10 +1858,11 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 # ------------------------------------------------------  now use $cmd in the namespace $ns to create/assign values to namespace   -----------
 	
 	if [catch {
+#			puts "about to do the namespace eval ns= |$ns| ncmd= \n|$ncmd| "
 			namespace eval $ns $ncmd
 	} err_code] {
-		puts $err_code
-		puts stderr $ncmd 
+#		puts $err_code
+#		puts stderr $ncmd 
 	}
 	
 # ------------------------------------------------------  compare the 2 lists, from namespace and info vars, result is $equal      -----------
@@ -1812,8 +1885,11 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 #	vwait forever
 
 # ------------------------------------------- * --------------------- call to get the window updated, by CALLING VW + from here --------------
+#	puts "equal= |$equal| "
 	if { (! $equal) || 0} {
-#		puts timex-[timems {  	$::___zz___(vw+) "${ns}::" .$ns       }]  
+#		puts timex-[timems {  	$::___zz___(vw+) "${ns}::" .$ns       }] 
+#		puts "about to call vw+ with  ${ns}:: .$ns "
+#		vwait forever
 		                    	$::___zz___(vw+) "${ns}::" .$ns 
 	} else {
 		if { $varsdiff } {
@@ -2138,7 +2214,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 			set aval [uplevel 1 $cmd]
 			set ok 1
 		} err_code] {
-			puts "$err_code for $var, so skip it"
+#			puts "$err_code for $var, so skip it"
 			set ok 0
 		}
 		if { ! $ok } {
@@ -2147,6 +2223,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 #		puts "var=$var  aval= |$aval| arr= |$arr|"
 		set nsvar "::${ns}::${var}" ;# the variable our namespace, so we can push it back to the locals
 		set comment_it_out ""
+#		puts "nsvar= |$nsvar| "
 		if { $var eq "args" } {
 #			set comment_it_out "#" ;# don't think it's a good idea to have the user change args, maybe we will change our minds
 		}
@@ -2154,7 +2231,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 			append	ncmd "#array set $var \{() $nsvar\} ...\n" ;# here is where would could someday support local array variables
 		} else {
 #			append	ncmd "${comment_it_out}set $var \$$nsvar \n puts \"$var now is \$$var\" \n   " ;# debug in the proc's space
-			append	ncmd "   ${comment_it_out}set $var \$$nsvar  \n"
+			append	ncmd "   ${comment_it_out}set $var \$\{${nsvar}\}  \n"
 		}
 	}
 #	puts "at bot ns= |$ns| ncmd= |\n$ncmd| "
@@ -2174,9 +2251,43 @@ proc instrument+ {procedure args} {
 # to use, do this:   eval [instrument+ procname]
 # after the proc has been defined, this will re-define it with debug code
 
+	set lbracket "\{"
+	set rbracket "\}"
+# -------------------------------------------------------- instrument class methods, by faking it, quite a hack, but hey...
+	if { $procedure eq "-class" } { ;# instr -class class method
+		set theclass [lindex $args 0 ]
+		set themethod [lindex $args 1 ]
+		set def [info class definition $theclass $themethod]
+		set arglist [lindex $def 0]
+		set mcode [lindex $def 1]
+#		puts "theclass= |$theclass| themethod= |$themethod| def= |$def| arglist= |$arglist| mcode= |$mcode| \n\n" 
+		set temp "proc ${theclass}__z__$themethod \{$arglist\} \{ $mcode\}\n" ;# construct a fake proc
+		set len [string length "proc ${theclass}__z__$themethod"]
+#		puts -nonewline $temp 
+		eval $temp ;# now define the new fake proc, so we can instrument it normally
+		set result [instrument+ ${theclass}__z__$themethod] ;# instrument this fake proc
+#		puts $result
+		
+		set lines0 [split $result \n]
+		set lines [lrange $lines0 1 end-3]
+		set line1 [string range [lindex $lines0 0] $len end] ;# remove the 2 traces at the end
+		set traces [lrange $lines0 end-2 end] ;# eventually we need to see if we can trace a method, this is just for the color change on method leaving
+		set newline1 "oo::define ${theclass} $lbracket method $themethod $line1 \n" ;# rebuild the method def
+#		puts "\n\n"
+		set result $newline1 ;# start with a new line 1, which is the oo::define and method declaration
+		foreach item [lmap xxx $lines {string cat $xxx \n}] {
+			append result $item	
+		}
+		append result "\n$rbracket"
+#		puts "line1= |$line1| \nresult= \n\n\n|$result|\n\n\n newline1= |$newline1| "
+		rename ${theclass}__z__$themethod {} ;# get rid of the temporary proc we built so we could instrument it
+		return $result
+	}
+
+# -------------------------------------------------------- instrument a proc ...
+
 	set enable 1 ;# enable instrumenting
 #	set pcode [getproc $procedure]
-	set rbracket "\}"
 	set norb 0
 #	puts "args= |$args| "
 	if { [lsearch "-norb" $args] >= 0 } {  
@@ -2286,7 +2397,7 @@ proc instrument+ {procedure args} {
 			set keys [list if foreach proc for while  $rb ]
 			if {$cmd  in $keys } {
 #				puts "$cmd is in $keys"
-				if { [string index $tline end] eq "\{"} {
+				if { [string index $tline end] eq $lbracket} {
 					set ok 2 ;# some sort of control command ending in a open brace
 				}
 			}
