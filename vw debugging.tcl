@@ -1225,6 +1225,46 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		
 # ------------------------------------------------------ utility enter-callback ----------------------------------------
 
+	} elseif { $func eq "grid" } { 	;# line up all the windows
+
+		set x -9
+		set y -2
+		set max 1080
+		set ws $::___zz___(vws)
+		set index 0
+		set wn [llength $ws]
+		set extra 15
+		set xincr 700
+		if { [llength $args] > 0 } {
+			set extra [lindex $args 0 ]
+		}
+		if { [llength $args] > 1 } {
+			set xincr [lindex $args 1 ]
+		}
+		for {set n 0} {$n < $wn } {incr n} {
+			set w [lindex $ws $n]
+			if { [info command $w] eq "" } {
+				continue
+			}
+			set geom [wm geom $w]
+			set xy [split $geom +]
+			set xandy [split [lindex $xy 0 ] x]
+			set xx [lindex $xy 1]
+			set yy [lindex $xy 2]
+			set newgeom [lindex $xy 0 ]+$x+$y
+#			puts "newgeom = /$newgeom/  n= |$n| w= |$w| geom= |$geom| xy= |$xy| xandy= |$xandy| xx= |$xx| yy= |$yy| "
+			set y [expr {   $y + [lindex $xandy  1 ] +$extra  }]
+			if { $y > ($max - 500) } {
+				set y -2
+				incr x $xincr
+			}
+			wm geom $w $newgeom
+			update
+			raise $w
+			after 50
+			update
+		}
+		return
 	} elseif { $func eq "enter-callback" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
 	
 		set n [lindex $args 0 ] ;# get the 3 arguments this ensemble has, n=1 or 2 for which entry box
@@ -1527,7 +1567,7 @@ if { 00 } {
 		puts "     lp <procedure>       display the current code for a proc "
 		puts "     smod    #            set the modula for reporting on skiping (now $::___zz___(skip_modulo))"
 		puts "     clean                close all the data windows #= [llength $::___zz___(vws)]"
-#		puts "     util+ help: "
+		puts "     grid ?y-extra? ?x-incr? reposition all data windows uses 15 / 500 for y/x"
 #		puts "     util+ help: "
 #		puts "     util+ help: "
 	} elseif { $func eq "stuff" } {
@@ -2458,3 +2498,12 @@ proc instrument+ {procedure args} {
 	append out "trace add execution $procedure leave \{$::___zz___(util+) tracerend\}\n"
 	return $out
 }
+
+
+
+
+
+
+
+
+
