@@ -679,6 +679,8 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 # ---------------------------------------------- process argsn a list of variable names --------------------------------
 	
 	set size {{consolas} 12}
+#	set size {TkFixedFont 12}
+#	font
 	set maxwid 16 ;# compute max variable length so groove fills, but set minimum first
 	if { [llength $argsn] == 0 } {
 		puts stderr "no matching variables found for pattern $pat"
@@ -1113,51 +1115,93 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 		while {1 } {
 # ---------------------------------------------- ----- the vwait on the breakpoint -------------------------------------
 			vwait ::___zz___(bp) ;# pause until this is set again
-			if { $::___zz___(bp) != 100 } { ;# our internal value, when we do the uplevel command from the code window, 
+			if { $::___zz___(bp) < 100 } { ;# our internal value, when we do the uplevel command from the code window, 
 				break						;# we can't do it from there, we need to do it from here, so we queue up the command and resume with 100 in (bp)
 			}
-			if [catch {
-#					puts "try this |$::___zz___(queued_cmd)|"
-					set ok 0
-					for {set m -1} {$m > -4} {incr m -1} {
-#						puts "\nm= |$m| "
-						set up		[uplevel [expr {(   0-$m   )}] info frame $m]
-						set vars	[uplevel [expr {(   0-$m   )}] info vars]
-#						puts "m= |$m| up= |$up| \nvars: $vars"
-						if { [dict exists $up "proc" ] } {
-							set prc [dict get $up "proc"]
-#							puts "prc= |$prc| m=$m"
-							if { $prc ne "::$::___zz___(lbp+)" && $prc ne "::$::___zz___(bp+)"} {
-								set ok [expr {(   abs($m + 1)   )}]
-#								puts "found proc at level - $m  => $ok"
-								break
-							}
-						} elseif { [dict exists $up "method" ] } {
-							set prc [dict get $up "method"]
-#							puts "method= |$prc| m=$m"
-							if { $prc ne "::$::___zz___(lbp+)" && $prc ne "::$::___zz___(bp+)"} {
-								set ok [expr {(   abs($m + 1)   )}]
-#								puts "found method at level - $m  => $ok"
-								break
+			if { $::___zz___(bp) == 100 } { ;# do uplevel entry commands
+				if [catch {
+#						puts "try this |$::___zz___(queued_cmd)|"
+						set ok 0
+						for {set m -1} {$m > -4} {incr m -1} {
+#							puts "\nm= |$m| "
+							set up		[uplevel [expr {(   0-$m   )}] info frame $m]
+							set vars	[uplevel [expr {(   0-$m   )}] info vars]
+#							puts "m= |$m| up= |$up| \nvars: $vars"
+							if { [dict exists $up "proc" ] } {
+								set prc [dict get $up "proc"]
+#								puts "prc= |$prc| m=$m"
+								if { $prc ne "::$::___zz___(lbp+)" && $prc ne "::$::___zz___(bp+)"} {
+									set ok [expr {(   abs($m + 1)   )}]
+#									puts "found proc at level - $m  => $ok"
+									break
+								}
+							} elseif { [dict exists $up "method" ] } {
+								set prc [dict get $up "method"]
+#								puts "method= |$prc| m=$m"
+								if { $prc ne "::$::___zz___(lbp+)" && $prc ne "::$::___zz___(bp+)"} {
+									set ok [expr {(   abs($m + 1)   )}]
+#									puts "found method at level - $m  => $ok"
+									break
+								}
 							}
 						}
-					}
-#					puts "ok= |$ok| " 
-					if [catch {
-						set ok2 [uplevel $ok info vars]   ;# $::___zz___(queued_cmd)
-#						puts "ok2= |$ok2| "
-						set ok2 [uplevel $ok $::___zz___(queued_cmd)]   ;# alright do it in his level
-						puts -nonewline stderr "result from uplevel: " 
-						puts "$ok2"
-#						puts "ok2= |$ok2| "
-					} err_code] {
-						puts -nonewline stderr "error on uplevel $ok "
-						puts $err_code
-					}
-#					puts "up 1 [uplevel 1 info vars]"
-#					puts "up 2 [uplevel 2 info vars]"
-			} err_code] {
-					puts $err_code 
+#						puts "ok= |$ok| " 
+						if [catch {
+							set ok2 [uplevel $ok info vars]   ;# $::___zz___(queued_cmd)
+#							puts "ok2= |$ok2| "
+							set ok2 [uplevel $ok $::___zz___(queued_cmd)]   ;# alright do it in his level
+							puts -nonewline stderr "result from uplevel: " 
+							puts "$ok2"
+#							puts "ok2= |$ok2| "
+						} err_code] {
+							puts -nonewline stderr "error on uplevel $ok "
+							puts $err_code
+						}
+#						puts "up 1 [uplevel 1 info vars]"
+#						puts "up 2 [uplevel 2 info vars]"
+				} err_code] {
+						puts $err_code 
+				}
+			} elseif {$::___zz___(bp) == 101} { ;#list frames
+#						puts "try this |$::___zz___(queued_cmd)|"
+						for {set m -10} {$m <= 0} {incr m} {
+							if [catch {
+#								puts "\nm= |$m| "
+								set up		[ info frame $m]
+#								set vars	[uplevel [expr {(   0-$m   )}] info vars]
+								if { [dict exists $up proc] } {
+									set p [dict get $up proc] 
+									if {$p eq "::$::___zz___(bp+)" || $p eq "::$::___zz___(lbp+)" } {
+#										puts "skipping $p"
+										continue
+									}
+								}
+#								puts "m= |$m| up= |$up|"
+								puts "------------- $m ---------------"
+								foreach item [dict keys $up] {
+									set val [dict get $up $item]
+									if { $item eq "level" } {
+										continue
+									}
+									if { $item eq "cmd" && [string range $val 0 3]  eq $::___zz___(lbp+) } {
+										continue
+									}	
+									set val2 [string range [string trim [string map {\n \u2936} $val]]  0 100] 
+									if {  $item eq "cmd" } {
+										if { [string length $val] > 100 } {
+											set val2 "${val2} ..."
+										}
+									}
+									puts [format {    %-6s => %s} $item $val2]
+								}
+								
+							} err_code] {
+								if { $err_code  ne ""} {
+#									puts stderr "level $m = $err_code"
+								}
+								
+							}
+						}
 			}
 		}
 		incr ::___zz___(level) -1
@@ -1221,9 +1265,10 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			}
 			
 		}
-		$w config -font "$font $size"
+		set tfont "$font $size"
+		$w config -font "$font $size" -tabs "[expr {4 * [font measure $tfont 0]}] left"
 		
-# ------------------------------------------------------ utility enter-callback ----------------------------------------
+# ------------------------------------------------------ utility grid --------------------------------------------------
 
 	} elseif { $func eq "grid" } { 	;# line up all the windows
 
@@ -1235,6 +1280,9 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		set wn [llength $ws]
 		set extra 15
 		set xincr 700
+		if { $::tcl_platform(os) eq "Linux" } {
+			set extra 50
+		}
 		if { [llength $args] > 0 } {
 			set extra [lindex $args 0 ]
 		}
@@ -1265,6 +1313,17 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			update
 		}
 		return
+
+# ------------------------------------------------------ utility frames-callback ----------------------------------------
+
+	} elseif { $func eq "frames-callback" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
+#		set ::___zz___(queued_cmd) {puts frames-callback} 
+		set ::___zz___(bp) 101 ;# needs to be the last thing we do before we get outa here
+		return
+	} elseif { $func eq "frames-callback2" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
+		return
+# ------------------------------------------------------ utility enter-callback ----------------------------------------
+
 	} elseif { $func eq "enter-callback" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
 	
 		set n [lindex $args 0 ] ;# get the 3 arguments this ensemble has, n=1 or 2 for which entry box
@@ -1966,17 +2025,39 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 		set ::___zz___(lbp-locka) 0
 		set ::___zz___(lbp-lockb) 0
 		set font {Consolas 12}
+#		set font {TkFixedFont 12}
+
 		toplevel .lbp_console
 		frame .lbp_console.bframe ;# frame with buttons
 		frame .lbp_console.cframe ;# frame with program text
-		
+
+
 		
 		text  .lbp_console.cframe.text -height 25 -wrap none -font $font -tabs "[expr {4 * [font measure $font 0]}] left" -tabstyle wordprocessor -width 24 -yscrollcommand [list .lbp_console.cframe.y set] -fg $::___zz___(black) -bg  $::___zz___(white)
 		scrollbar .lbp_console.cframe.y -orient vertical -command [list  .lbp_console.cframe.text yview]
 		
 		button .lbp_console.bframe.b0    -text "eXit" 	 -command {exit} ;# -image $image ;#
-		button .lbp_console.bframe.b1    -text "Clear" 	 -command {.lbp_console.cframe.text delete 1.0 end} ;# -image $image ;#
-		button .lbp_console.bframe.b2    -text "Bottom"  -command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end} ;# -image $image ;#
+#		button .lbp_console.bframe.b1    -text "Clear" 	 -command {.lbp_console.cframe.text delete 1.0 end} ;# -image $image ;#
+
+
+		label  .lbp_console.bframe.b1	 -text "Menu" -relief raised
+		
+		# Create a menu
+		set m [menu .lbp_console_menu1 -tearoff 0]
+		$m add command 	-label "util+ grid  - rearange windows" 		-command "[list $::___zz___(util+) grid];raise .lbp_console" 	-font TkFixedFont
+		$m add command 	-label "util+ clean - close all data windows" 	-command [list $::___zz___(util+) clean]						-font TkFixedFont
+		$m add separator 					
+		$m add command 	-label "Clear code window" 						-command {.lbp_console.cframe.text delete 1.0 end}				-font TkFixedFont
+		$m add command 	-label "Bottom of code window" 					-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
+		$m add separator 					
+		$m add command 	-label "List all Calling Frames" 				-command [list $::___zz___(util+) frames-callback]				-font TkFixedFont
+#		$m add command 	-label "Bottom of code window" 					-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
+		
+		bind .lbp_console.bframe.b1 <1> {tk_popup .lbp_console_menu1 %X %Y}
+	
+		
+		
+#		button .lbp_console.bframe.b2    -text "Bottom"  -command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end} ;# -image $image ;#
 		checkbutton .lbp_console.bframe.b2a    -text "lock" -variable ::___zz___(lbp-lock) -relief raised ;# -image $image ;# -command $tcmd 
 
 		button .lbp_console.bframe.b3    -text "Font --" -command [list $::___zz___(util+) fontsize .lbp_console.cframe.text -1] ;# -image $image ;#
@@ -2103,7 +2184,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 #		bind .t   <Double-Button-1> [list after idle [list $foo double-click %W %x %y]]		
 		pack .lbp_console.cframe.y   -side right -expand 0 -fill y
 		
-		pack .lbp_console.bframe.b0 .lbp_console.bframe.b1 .lbp_console.bframe.b2 .lbp_console.bframe.b3  .lbp_console.bframe.b4 .lbp_console.bframe.b5 .lbp_console.bframe.b6  .lbp_console.bframe.b9   .lbp_console.bframe.b7   .lbp_console.bframe.b2a .lbp_console.bframe.b8  -fill both -expand true -side left
+		pack .lbp_console.bframe.b0 .lbp_console.bframe.b1 .lbp_console.bframe.b3  .lbp_console.bframe.b4 .lbp_console.bframe.b5 .lbp_console.bframe.b6  .lbp_console.bframe.b9   .lbp_console.bframe.b7   .lbp_console.bframe.b2a .lbp_console.bframe.b8  -fill both -expand true -side left
 		if { [info exist ::___zz___(console_geom) ]} {
 #			after 100 {wm geom .lbp_console {*}$::___zz___(console_geom) ; update}
 			puts "setting lbp console geom $::___zz___(console_geom) "
@@ -2130,8 +2211,8 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 					tooltip::tooltip  .lbp_console.xframe.lab3a  "Clear the command entry, where you can\nenter a command. Runs at global level, however\nso be careful"
 					tooltip::tooltip  .lbp_console.uframe.lab3c  "Clear the uplevel entry, where you can\nenter a command that runs in the stopped proc.\nthe result will be output in the console stderr"
 
-					tooltip::tooltip .lbp_console.bframe.b1     "Clear the window"     
-					tooltip::tooltip .lbp_console.bframe.b2     "Scroll to Bottom of the window"    
+					tooltip::tooltip .lbp_console.bframe.b1     "Menu of utility commands, left click"     
+#					tooltip::tooltip .lbp_console.bframe.b2     "Scroll to Bottom of the window"    
 					tooltip::tooltip .lbp_console.bframe.b2a    "Keep the window steady, may result\nin some lines off screen"    
 					tooltip::tooltip .lbp_console.bframe.b3     "Smaller font"   
 					tooltip::tooltip .lbp_console.bframe.b4     "Larger font"   
