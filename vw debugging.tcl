@@ -926,7 +926,8 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 		}
 #		puts "w= |$w| ww= |$ww|  newgeom= |$newgeom| "
 # ---------------------------------------------- modify GEOMETRY no bwidgets -------------------------------------------
-		if { $::___zz___(cb7,$ww) == 0} {
+		set ww0 .[lindex [split $w .] 1]
+		if {[info exist ::___zz___(cb7,$ww0)] && $::___zz___(cb7,$ww0) == 0} {
 				wm geom $w $ww$newgeom 
 		}
 # ---------------------------------------------- bwidgets try to compute new size of window ----------------------------
@@ -961,7 +962,8 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 				puts $err_code 
 			}
 # ---------------------------------------------- modify GEOMETRY bwidgets ----------------------------------------------
-			if { $::___zz___(cb7,$ww) == 0} {
+			set ww0 .[lindex [split $w .] 1]
+			if {[info exist ::___zz___(cb7,$ww0)] && $::___zz___(cb7,$ww0) == 0} {
 				catch {wm geom $wtop $newgeom}
 			}
 		}
@@ -1162,8 +1164,11 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 				} err_code] {
 						puts $err_code 
 				}
-			} elseif {$::___zz___(bp) == 101} { ;#list frames
+			} elseif {$::___zz___(bp) == 101 || $::___zz___(bp) == 102 } { ;#list frames (102, just the cmd entries)
 #						puts "try this |$::___zz___(queued_cmd)|"
+						if { $::___zz___(bp) == 102  } {
+							puts "------------- -- ---------------"
+						}
 						for {set m -10} {$m <= 0} {incr m} {
 							if [catch {
 #								puts "\nm= |$m| "
@@ -1177,7 +1182,9 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 									}
 								}
 #								puts "m= |$m| up= |$up|"
-								puts "------------- $m ---------------"
+								if { $::___zz___(bp) == 101 } {
+									puts "------------- $m ---------------"
+								}
 								foreach item [dict keys $up] {
 									set val [dict get $up $item]
 									if { $item eq "level" } {
@@ -1191,8 +1198,13 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 										if { [string length $val] > 100 } {
 											set val2 "${val2} ..."
 										}
+										puts -nonewline stderr [format {    %-6s} $item]
+										puts stderr [format { => %s} $val2]
+										continue
 									}
-									puts [format {    %-6s => %s} $item $val2]
+									if { $::___zz___(bp) == 101 } {
+										puts [format {    %-6s => %s} $item $val2]
+									}
 								}
 								
 							} err_code] {
@@ -1211,6 +1223,7 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 	if { ! $nomessage &&  ! $nobreak} { ;# if we didn't pause, then we don't say continue
 		puts stderr "Continuing..."
 	}
+	set  ::___zz___(bp) 1
 }
 
 # ----------------------------------- go + ----- go command  -----------------------------------------------------------
@@ -1283,6 +1296,9 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		if { $::tcl_platform(os) eq "Linux" } {
 			set extra 50
 		}
+		if { [info exist ::___zz___(bwidget)] &&  $::___zz___(bwidget) == 0} {
+			incr extra 25
+		}
 		if { [llength $args] > 0 } {
 			set extra [lindex $args 0 ]
 		}
@@ -1302,7 +1318,7 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			set newgeom [lindex $xy 0 ]+$x+$y
 #			puts "newgeom = /$newgeom/  n= |$n| w= |$w| geom= |$geom| xy= |$xy| xandy= |$xandy| xx= |$xx| yy= |$yy| "
 			set y [expr {   $y + [lindex $xandy  1 ] +$extra  }]
-			if { $y > ($max - 500) } {
+			if { $y > ($max - 300) } {
 				set y -2
 				incr x $xincr
 			}
@@ -1316,11 +1332,17 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 
 # ------------------------------------------------------ utility frames-callback ----------------------------------------
 
-	} elseif { $func eq "frames-callback" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
+	} elseif { $func eq "frames-callback" } { 	;# display all frames verbose
 #		set ::___zz___(queued_cmd) {puts frames-callback} 
 		set ::___zz___(bp) 101 ;# needs to be the last thing we do before we get outa here
 		return
-	} elseif { $func eq "frames-callback2" } { 	;# the 2 entry widgets and their callbacks, 3 args (in args)
+	} elseif { $func eq "frames-callback2" } { 	;# display just cmd entry in frames
+		set ::___zz___(bp) 102 ;# needs to be the last thing we do before we get outa here
+		return
+	} elseif { $func eq "no-bp-messages-all" } { 	;# display just cmd entry in frames
+		foreach item [array names ::___zz___ "cb4,*" ] {
+			set ::___zz___($item) 1
+		}
 		return
 # ------------------------------------------------------ utility enter-callback ----------------------------------------
 
@@ -1469,7 +1491,11 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 		}
 
 		if [catch {
-					.lbp_console.cframe.text configure -bg $::___zz___(yellow) -fg $::___zz___(yellowx)
+			set last [lindex [split [.lbp_console.cframe.text index end] .] 0]
+			for {set n 1} {$n < ($last-1) } {incr n } {
+				.lbp_console.cframe.text replace ${n}.0 ${n}.0 "\u2936"
+			}
+#			.lbp_console.cframe.text configure -bg $::___zz___(yellow) -fg $::___zz___(yellowx)
 		} err_code] {
 			puts "setting to yellow: $err_code "
 		}
@@ -1480,11 +1506,13 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 
 	} elseif { $func eq "tracer" } { 	;# this is used to clear the namespace for the proc, 
 										;# clearing vars so next time in we start over, internal call only
-		if [catch {
-					.lbp_console.cframe.text configure -bg $::___zz___(white) -fg $::___zz___(black)
-		} err_code] {
+# no longer setting bg color to indicate procedure has ended, since we can't figure out how to trace methods
+# so we now just insert the unicode char for enter/return to indicate we've left a proc, methods we do nothing
+#		if [catch {
+#					.lbp_console.cframe.text configure -bg $::___zz___(white) -fg $::___zz___(black)
+#		} err_code] {
 #			puts "setting to white: $err_code "
-		}
+#		}
 		incr ::___zz___(trace-level)
 #		puts stderr "in tracer args= |$args| "
 		set prc [lindex  $args 0 0] ;# get the proc name from the trace input
@@ -1533,6 +1561,23 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 
 	} elseif { $func eq "clean" } { #close all vw+ windows, from the ___zz___(vws) list
 		foreach window $::___zz___(vws) {
+			if { [lindex $args 0] eq "code" } {
+				if { [info command ${window}.sw.f.frame.l0] ne "" } {
+					set value [ ${window}.sw.f.frame.l0 cget -text]
+#					puts "bw value= |$value| "
+				}
+				if { [info command ${window}.l0] ne "" } {
+					set value [ ${window}.l0 cget -text]
+#					puts "nobw value= |$value| "
+				}
+				set cd "::[string range $window 1 end]::___[string range $window 2 end]"
+				if { $value eq  $cd} {
+#					puts "it's a code window |$cd|"
+				} else {
+#					puts "it's NOT a code window |$cd|"	
+					continue
+				}
+			}
 			puts "close window= |$window| "
 			destroy	$window
 		}
@@ -2036,24 +2081,33 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 		text  .lbp_console.cframe.text -height 25 -wrap none -font $font -tabs "[expr {4 * [font measure $font 0]}] left" -tabstyle wordprocessor -width 24 -yscrollcommand [list .lbp_console.cframe.y set] -fg $::___zz___(black) -bg  $::___zz___(white)
 		scrollbar .lbp_console.cframe.y -orient vertical -command [list  .lbp_console.cframe.text yview]
 		
-		button .lbp_console.bframe.b0    -text "eXit" 	 -command {exit} ;# -image $image ;#
+		button .lbp_console.bframe.b0    -text "EXIT" 	 -command {exit} ;# -image $image ;#
 #		button .lbp_console.bframe.b1    -text "Clear" 	 -command {.lbp_console.cframe.text delete 1.0 end} ;# -image $image ;#
 
 
 		label  .lbp_console.bframe.b1	 -text "Menu" -relief raised
 		
 		# Create a menu
-		set m [menu .lbp_console_menu1 -tearoff 0]
+		set m [menu .lbp_console.menu1 -tearoff 1]
+#		$m add separator 					
 		$m add command 	-label "util+ grid  - rearange windows" 		-command "[list $::___zz___(util+) grid];raise .lbp_console" 	-font TkFixedFont
-		$m add command 	-label "util+ clean - close all data windows" 	-command [list $::___zz___(util+) clean]						-font TkFixedFont
+		$m add command 	-label "no bp messages - check all" 			-command [list $::___zz___(util+) no-bp-messages-all]			-font TkFixedFont
+		$m add separator 					
+		$m add command 	-label "util+ clean      - close all  data windows" 	-command [list $::___zz___(util+) clean]				-font TkFixedFont
+		$m add command 	-label "util+ clean code - close code data windows" 	-command [list $::___zz___(util+) clean code]			-font TkFixedFont
+		$m add separator 					
+		$m add command 	-label "no bp messages - set default 0" 		-command {set ::___zz___(bp_messages_default) 0}				-font TkFixedFont
+		$m add command 	-label "no bp messages - set default 1" 		-command {set ::___zz___(bp_messages_default) 1}				-font TkFixedFont
 		$m add separator 					
 		$m add command 	-label "Clear code window" 						-command {.lbp_console.cframe.text delete 1.0 end}				-font TkFixedFont
 		$m add command 	-label "Bottom of code window" 					-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
 		$m add separator 					
 		$m add command 	-label "List all Calling Frames" 				-command [list $::___zz___(util+) frames-callback]				-font TkFixedFont
+		$m add command 	-label "List cmd Calling Frames" 				-command [list $::___zz___(util+) frames-callback2]				-font TkFixedFont
+#		$m add separator 					
 #		$m add command 	-label "Bottom of code window" 					-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
 		
-		bind .lbp_console.bframe.b1 <1> {tk_popup .lbp_console_menu1 %X %Y}
+		bind .lbp_console.bframe.b1 <1> {tk_popup .lbp_console.menu1 %X %Y}
 	
 		
 		
@@ -2224,7 +2278,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 					tooltip::tooltip .lbp_console.xframe.sbox 	"Precision, number of instructions / breakpoint\nonly when in Run mode (a g with a value other than 1)"       
 				}
 			} err_code] {
-				puts "Tooltip error: $err_code" 
+				puts stderr "Tooltip error: $err_code" 
 				set ::___zz___(tooltips) 0
 			}
 		}
@@ -2376,8 +2430,23 @@ proc instrument+ {procedure args} {
 	set rbracket "\}"
 # -------------------------------------------------------- instrument class methods, by faking it, quite a hack, but hey...
 	if { $procedure eq "-class" } { ;# instr -class class method
+	
 		set theclass [lindex $args 0 ]
+		if { [llength $args] > 2 } {
+			set all {}
+			foreach item [lrange $args 1 end] {
+				append all [instrument+ -class $theclass $item]	
+			}
+			return $all
+		}
 		set themethod [lindex $args 1 ]
+		if { $themethod eq "*" } {
+			set all {}
+			foreach item [info class methods $theclass] {
+				append all [instrument+ -class $theclass $item]	
+			}
+			return $all
+		}
 		set def [info class definition $theclass $themethod]
 		set arglist [lindex $def 0]
 		set mcode [lindex $def 1]
@@ -2399,7 +2468,7 @@ proc instrument+ {procedure args} {
 		foreach item [lmap xxx $lines {string cat $xxx \n}] {
 			append result $item	
 		}
-		append result "\n$rbracket"
+		append result "\n$rbracket\n"
 #		puts "line1= |$line1| \nresult= \n\n\n|$result|\n\n\n newline1= |$newline1| "
 		rename ${theclass}__z__$themethod {} ;# get rid of the temporary proc we built so we could instrument it
 		return $result
