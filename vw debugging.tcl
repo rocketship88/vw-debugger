@@ -1339,7 +1339,7 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 	} elseif { $func eq "frames-callback2" } { 	;# display just cmd entry in frames
 		set ::___zz___(bp) 102 ;# needs to be the last thing we do before we get outa here
 		return
-	} elseif { $func eq "no-bp-messages-all" } { 	;# display just cmd entry in frames
+	} elseif { $func eq "no-bp-messages-all" } { 	;# set all the checkboxes
 		foreach item [array names ::___zz___ "cb4,*" ] {
 			set ::___zz___($item) 1
 		}
@@ -1479,7 +1479,7 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 # ------------------------------------------------------ reach end of a proc by trace callback  ------------------------
 
 	
-	} elseif { $func eq "tracerend" } { 	;# this is used at the end of a proc, to set window yellow indicating we left the proc, but leaving data window for final inspection
+	} elseif { $func eq "tracerend" } { 	;# this is used at the end of a proc, to insert a unicode return char but leaving data window for final inspection
 #		puts stderr "in tracerend args= |$args| "
 		
 		incr ::___zz___(trace-level) -1
@@ -1584,6 +1584,12 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 # ------------------------------------------------------  kill something  -----------------------------------------------
 	} elseif { $func eq "kill" } { 
 	
+# ------------------------------------------------------  debug command, open window with debug data  ------------------------
+
+	} elseif { $func eq "debug" } { ;# a vw+ window with many debugger array values
+	$::___zz___(vw+) { ::___zz___(bpnum) 	::___zz___(proc_wid)	::___zz___(delay) 			::___zz___(cb1) 	::___zz___(delaya) ::___zz___(skips) ::___zz___(delayb_count)
+		::___zz___(skip_modulo) 	::___zz___(goto) 	::___zz___(delayb) ::___zz___(lbp-lock)  ::___zz___(lbp-locka)  ::___zz___(lbp-lockb)  
+		}  debugger ;#  ::___zz___() 
 # ------------------------------------------------------  lp command, functional back to caller  ------------------------
 
 	} elseif { $func eq "lp" } {
@@ -1592,12 +1598,6 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 		if { $namepat eq "" } {
 			error "wrong number of args: should be $::___zz___(util+) lp procedure-name"
 		}
-# ------------------------------------------------------  debug command, open window with debug data  ------------------------
-
-	} elseif { $func eq "debug" } {
-	$::___zz___(vw+) { ::___zz___(bpnum) 	::___zz___(proc_wid)	::___zz___(delay) 			::___zz___(cb1) 	::___zz___(delaya) ::___zz___(skips) ::___zz___(delayb_count)
-		::___zz___(skip_modulo) 	::___zz___(goto) 	::___zz___(delayb) ::___zz___(lbp-lock)  ::___zz___(lbp-locka)  ::___zz___(lbp-lockb)  
-		}  debugger ;#  ::___zz___() 
 
 	
 # ------------------------------------------------------  old lp for reference only  ------------------------------------
