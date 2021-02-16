@@ -60,6 +60,7 @@ set ::___zz___(queued_cmd) {}   ;# so we can do an uplevel
 set ::___zz___(lbp-ontop)  0    ;# the code window on top checkbox
 set ::___zz___(updatesome)  10  ;# update at least once this many steps
 set ::___zz___(updatesomeN)  0  ;# counter to use with updatesome
+set ::___zz___(gangcb)       0  ;# checkbutton for gang moving of data windows, first window moves all together
 
 set ::___zz___(vw+) "vw+"       ;# the name of the vw+ proc (can perhaps change these if desired, both here and any aliases)
 set ::___zz___(go+) "go+"       ;# the name of the go+ proc 
@@ -1305,11 +1306,13 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		if { [llength $args] > 1 } {
 			set xincr [lindex $args 1 ]
 		}
+		set ::___zz___(vws) {} ;# rebuild from our copy, less any that are deleted
 		for {set n 0} {$n < $wn } {incr n} {
 			set w [lindex $ws $n]
 			if { [info command $w] eq "" } {
 				continue
 			}
+			lappend ::___zz___(vws) $w
 			set geom [wm geom $w]
 			set xy [split $geom +]
 			set xandy [split [lindex $xy 0 ] x]
@@ -1328,8 +1331,46 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			after 50
 			update
 		}
+		if { [llength $::___zz___(vws)] > 0 } {
+			set w [lindex $::___zz___(vws) 0] ;# front of list is the new guy to lead
+			set ::___zz___(gang) [wm geom $w] ;# save his current position and bind him
+			bind $w <Configure> [list $::___zz___(util+) gang-move %x %y]
+			set ::___zz___(gangcb) 1
+			puts "w= |$w| ::___zz___(gang)= |$::___zz___(gang)| "
+		}
+		
+		
 		return
-
+# ------------------------------------------------------ gang move callback   ------------------------------------------		
+	} elseif { $func eq "gang-move" } { 	;# display all frames verbose
+#		puts "configure args= |$args| "
+		set geom $::___zz___(gang)
+		regexp {^([0-9]+)x([0-9]+)([+-])([+-]?[0-9]+)([+-])([+-]?[0-9]+)} $geom -> dx dy xs xpos ys ypos
+#		puts "xpos= |$xpos| ypos= |$ypos| "
+		set xx [lindex $args 0 ]
+		set yy [lindex $args 1 ]
+		if { $xpos == $xx && $ypos == $yy } {
+#			puts "same position, did not move"
+#			puts "xpos= |$xpos| xx= |$xx| ypos= |$ypos| yy= |$yy| "
+		} else {
+			set dx   [expr {  $xx - $xpos   }]
+			set dy   [expr {  $yy - $ypos   }]	
+			set ::___zz___(gang) [wm geom [lindex $::___zz___(vws) 0]]
+#			puts stderr "dx= |$dx| dy= |$dy| ------------ amount to move other windows  -- new geom $::___zz___(gang) /[lrange $::___zz___(vws) 1 end]/"
+			foreach w [lrange $::___zz___(vws) 1 end] {
+				set geom [wm geom $w]
+				regexp {^([0-9]+)x([0-9]+)([+-])([+-]?[0-9]+)([+-])([+-]?[0-9]+)} $geom -> sxx syy xs xpos ys ypos
+				set newx [expr {    $xpos + $dx   }]
+				set newy [expr {    $ypos + $dy   }]
+				set newgeom ${sxx}x${syy}+$newx+$newy
+#				puts "w= |$w| newgeom= |$newgeom| "	
+				if { $::___zz___(gangcb) } {
+					wm geom $w $newgeom
+					update
+				}
+			}
+		}
+		return
 # ------------------------------------------------------ utility frames-callback ----------------------------------------
 
 	} elseif { $func eq "frames-callback" } { 	;# display all frames verbose
@@ -1389,7 +1430,7 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 #			eval  "do \{$val\} 1"
 		} else {
 #			puts "do the command locally      : /$val/"
-			after 0  $val ;# make it run at global level, like the console
+			after 0  "puts stderr \"Command result: \" ; puts  \[$val\]" ;# make it run at global level, like the console
 		}
 		$w delete 0 end ;# after doing it, we clear it out and reset hnum
 		set ::___zz___(hnum,$n) -1
@@ -1587,8 +1628,10 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 # ------------------------------------------------------  debug command, open window with debug data  ------------------------
 
 	} elseif { $func eq "debug" } { ;# a vw+ window with many debugger array values
-	$::___zz___(vw+) { ::___zz___(bpnum) 	::___zz___(proc_wid)	::___zz___(delay) 			::___zz___(cb1) 	::___zz___(delaya) ::___zz___(skips) ::___zz___(delayb_count)
-		::___zz___(skip_modulo) 	::___zz___(goto) 	::___zz___(delayb) ::___zz___(lbp-lock)  ::___zz___(lbp-locka)  ::___zz___(lbp-lockb)  
+		$::___zz___(vw+) { 	::___zz___(bpnum) 			::___zz___(proc_wid)	::___zz___(delay) 		::___zz___(lbp-lock)  	::___zz___(lbp-locka)  ::___zz___(lbp-lockb)	
+							::___zz___(cb1) 			::___zz___(delaya) 		::___zz___(skips) 		::___zz___(delayb_count)
+							::___zz___(skip_modulo) 	::___zz___(goto) 		::___zz___(delayb) 		   
+							::___zz___(bp_messages_default) 					::___zz___(updatesome) 	::___zz___(updatesomeN) ::___zz___(gang) ::___zz___(vws)
 		}  debugger ;#  ::___zz___() 
 # ------------------------------------------------------  lp command, functional back to caller  ------------------------
 
@@ -2089,23 +2132,20 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 		
 		# Create a menu
 		set m [menu .lbp_console.menu1 -tearoff 1]
-#		$m add separator 					
-		$m add command 	-label "util+ grid  - rearange windows" 		-command "[list $::___zz___(util+) grid];raise .lbp_console" 	-font TkFixedFont
-		$m add command 	-label "no bp messages - check all" 			-command [list $::___zz___(util+) no-bp-messages-all]			-font TkFixedFont
+		$m add command 	-label 		"util+ grid       - rearange windows" 		-command "[list $::___zz___(util+) grid];raise .lbp_console" 	-font TkFixedFont
+		$m add checkbutton -label 	"move group       - if checked"				-variable ::___zz___(gangcb)	-indicatoron 1	-font TkFixedFont	
 		$m add separator 					
-		$m add command 	-label "util+ clean      - close all  data windows" 	-command [list $::___zz___(util+) clean]				-font TkFixedFont
-		$m add command 	-label "util+ clean code - close code data windows" 	-command [list $::___zz___(util+) clean code]			-font TkFixedFont
+		$m add command 	-label 		"util+ clean      - close all  data windows" 	-command [list $::___zz___(util+) clean]				-font TkFixedFont
+		$m add command 	-label 		"util+ clean code - close code data windows" 	-command [list $::___zz___(util+) clean code]			-font TkFixedFont
+		$m add separator 
+		$m add command 	-label 		"No bp Msgs       - check all" 					-command [list $::___zz___(util+) no-bp-messages-all]			-font TkFixedFont
+		$m add checkbutton -label 	"No bp Msgs (def) - if checked"		-variable ::___zz___(bp_messages_default)	-indicatoron 1	-font TkFixedFont	
 		$m add separator 					
-		$m add command 	-label "no bp messages - set default 0" 		-command {set ::___zz___(bp_messages_default) 0}				-font TkFixedFont
-		$m add command 	-label "no bp messages - set default 1" 		-command {set ::___zz___(bp_messages_default) 1}				-font TkFixedFont
+		$m add command 	-label 		"Clear code window" 				-command {.lbp_console.cframe.text delete 1.0 end}				-font TkFixedFont
+		$m add command 	-label 		"Bottom of code window" 			-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
 		$m add separator 					
-		$m add command 	-label "Clear code window" 						-command {.lbp_console.cframe.text delete 1.0 end}				-font TkFixedFont
-		$m add command 	-label "Bottom of code window" 					-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
-		$m add separator 					
-		$m add command 	-label "List all Calling Frames" 				-command [list $::___zz___(util+) frames-callback]				-font TkFixedFont
-		$m add command 	-label "List cmd Calling Frames" 				-command [list $::___zz___(util+) frames-callback2]				-font TkFixedFont
-#		$m add separator 					
-#		$m add command 	-label "Bottom of code window" 					-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
+		$m add command 	-label 		"List Call Frames - all" 			-command [list $::___zz___(util+) frames-callback]				-font TkFixedFont
+		$m add command 	-label 		"List Call Frames - just cmds" 		-command [list $::___zz___(util+) frames-callback2]				-font TkFixedFont
 		
 		bind .lbp_console.bframe.b1 <1> {tk_popup .lbp_console.menu1 %X %Y}
 	
