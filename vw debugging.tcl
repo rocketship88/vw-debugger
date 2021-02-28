@@ -50,6 +50,7 @@ set ::___zz___(cb1) 0           ;# the global wide breakpoint disable flag, set 
 set ::___zz___(level) 0         ;# 
 set ::___zz___(delay) 0         ;# debugging delay times to slow down what's going on
 set ::___zz___(goto) -1         ;# debugging goto line number
+set ::___zz___(tail) 0			;# used for a tailcall to update lines w/o continuing
 set ::___zz___(bpnum) 0
 set ::___zz___(delaya) 0        ;# spinbox for delaying stepping animation
 set ::___zz___(delayb) 1        ;# spinbox for changing precision, how many instructions per bp's animation
@@ -711,7 +712,9 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 		
 	}
 	foreach ii $argsn_sort_maybe {
-#		wait $::___zz___(delay)
+		if { $::___zz___(delay) > 0 } {
+			wait $::___zz___(delay)
+		}
 		set i [lindex $ii 0]
 		set j [lindex $ii 1]
 #		puts " n=$n   ii= [format %30s |$ii|] i= |$i| j= |$j|" ; update ; wait 5000
@@ -795,7 +798,7 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 						}
 					} else {
 						puts stderr "\n------------\nThe variable $foofoo\n------------"
-						puts "$foofoo = [set ::$foofoo]"
+						puts "$foofoo = |[set ::$foofoo]|"
 					}
 				} ] %W}
 			bind $w.l$n <Shift-1> {apply [list {win} {
@@ -1000,7 +1003,7 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 # ----------------------------------- bp + ----- low level breakpoint --------------------------------------------------
 
 
-proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed in from lbp+ from the windows checkbox options
+proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} {nocount 0}} { ;# the 2nd, 3rd, passed in from lbp+ from the windows checkbox options
 #	puts stderr "goto vs. line :  $::___zz___(goto)   [expr {(    $::___zz___(lbp+,line) +1   )}]"
 # ---------------------------------------------- spinbox delay setting -------------------------------------------------
 
@@ -1097,7 +1100,9 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 		update 
 #		flush stdout ; update ;# needed here?
 	} else {
-		incr ::___zz___(bpnum)
+		if { $nocount == 0 } {
+			incr ::___zz___(bpnum)
+		}
 	}
 	if { $nomessage } {
 		set ::___zz___(bp) 2 ;# indicate we are waiting for it to change but don't want
@@ -1153,7 +1158,7 @@ proc bp+ {{message {*}}  {nobreak 0}  {nomessage 0} } { ;# the 2nd, 3rd, passed 
 							set ok2 [uplevel $ok info vars]   ;# $::___zz___(queued_cmd)
 #							puts "ok2= |$ok2| "
 							set ok2 [uplevel $ok $::___zz___(queued_cmd)]   ;# alright do it in his level
-							puts -nonewline stderr "result from uplevel: " 
+							puts stderr "result from uplevel: " 
 							puts "$ok2"
 #							puts "ok2= |$ok2| "
 						} err_code] {
@@ -1253,7 +1258,26 @@ proc $::___zz___(go+) {{skip -1} {window ""}} {
 
 # ----------------------------------- util + --- utility command ensemble ----------------------------------------------
 
-
+if { 00 } {
+# trace add variable ::___zz___(bpnum) write "dtracer "
+proc dtracer {args} {
+	puts "dtracer -- args = $args"
+	set frame [info frame]
+	puts "frame= |$frame| "
+	for {set n $frame} {$n > 0} {incr n -1} {
+		if [catch {
+			set nframe [info frame $n]
+			puts "$n ---   nframe= |$nframe| "
+		} err_code] {
+			puts $err_code
+		}
+	}
+	if { [info exist ::foobar] } {
+		error "here is an error"
+	}
+	
+}
+}
 
 
 proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the list proc as sub commands, plus many more now
@@ -1281,7 +1305,31 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		}
 		set tfont "$font $size"
 		$w config -font "$font $size" -tabs "[expr {4 * [font measure $tfont 0]}] left"
-		
+	} elseif { $func eq "completeit" } { 	;# number of lines to show, would like this to be immediate, but requires a step
+#		puts "\n\n\nargs = $args\n\n\n"
+		set nlines [lindex $args 0 ]
+		set ln [lindex $args 1 ]
+		incr ln -1
+		set lines [lindex $args 2 ]
+#		puts "nlines= |$nlines| ln= |$ln| "
+		set collect {}
+		set nn 0
+		for {set n $ln} {$n < $nlines } {incr n} {
+			append collect [lindex $lines $n]\n
+			incr nn
+			if { [info complete $collect] } {
+				break
+			}	
+		}
+#		puts "collect= |\n\n\n$collect\n\n\n| n=$n   nn=$nn"
+		return [list $nn $collect]
+# ------------------------------------------------------ showlines    --------------------------------------------------
+
+	} elseif { $func eq "showlines" } { 	;# number of lines to show, would like this to be immediate, but requires a step
+#		puts "func= |$func| args= |$args| "
+		set ::___zz___(tail) 1
+		after 0 $::___zz___(go+)
+		return
 # ------------------------------------------------------ utility grid --------------------------------------------------
 
 	} elseif { $func eq "grid" } { 	;# line up all the windows
@@ -1336,7 +1384,7 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			set ::___zz___(gang) [wm geom $w] ;# save his current position and bind him
 			bind $w <Configure> [list $::___zz___(util+) gang-move %x %y]
 			set ::___zz___(gangcb) 1
-			puts "w= |$w| ::___zz___(gang)= |$::___zz___(gang)| "
+#			puts "w= |$w| ::___zz___(gang)= |$::___zz___(gang)| "
 		}
 		
 		
@@ -1430,7 +1478,11 @@ if { 1 } { ;# this is from the old debugger code, now in an ensemble instead of 
 #			eval  "do \{$val\} 1"
 		} else {
 #			puts "do the command locally      : /$val/"
-			after 0  "puts stderr \"Command result: \" ; puts  \[$val\]" ;# make it run at global level, like the console
+			if { [lindex $val 0] eq "g"  } {
+				after 0 $val ;# if it's our g command, don't echo it to stderr/stdout
+			} else {
+				after 0  "puts stderr \"Command result: \" ; puts  \[$val\]" ;# make it run at global level, like the console
+			}
 		}
 		$w delete 0 end ;# after doing it, we clear it out and reset hnum
 		set ::___zz___(hnum,$n) -1
@@ -1705,7 +1757,18 @@ if { 00 } {
 			append result "\}\n"
 			return $result
 		
-	
+	} elseif { $func eq "tearoff" } { 	;# line up all the windows
+#		puts "tearoff args= |$args| "
+		set geom [wm geom .lbp_console]
+		set re {^([0-9]+)x([0-9]+)([+-])([+-]?[0-9]+)([+-])([+-]?[0-9]+)}
+		regexp $re $geom -> dx dy xs xpos ys ypos
+		set geomt [wm geom [lindex $args 1 ]]
+		regexp $re $geomt -> dx dy xs xpost ys ypost
+		set newx $xpos
+		set newy [expr {   $ypos + 40   }]
+#		puts ${dx}x$dy+${newx}+${newy}
+		wm geom [lindex $args 1 ] ${dx}x$dy+${newx}+${newy}
+
 # ------------------------------------------------------  command usage help  -------------------------------------------
 
 
@@ -1729,7 +1792,7 @@ if { 00 } {
 
 
 #$::___zz___(lbp+)
-proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will create a window with local vars, id optional
+proc lbp+ { {comment {}} {bpid {}} {tailed 0}} { ;# breakpoint from within a proc, will create a window with local vars, id optional
 
 	
 # ------------------------------------------------------  lbp + command, see if can we get out quickly  -----------------
@@ -2131,7 +2194,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 		label  .lbp_console.bframe.b1	 -text "Menu" -relief raised
 		
 		# Create a menu
-		set m [menu .lbp_console.menu1 -tearoff 1]
+		set m [menu .lbp_console.menu1 -tearoff 1 -tearoffcommand [list $::___zz___(util+) tearoff]]
 		$m add command 	-label 		"util+ grid       - rearange windows" 		-command "[list $::___zz___(util+) grid];raise .lbp_console" 	-font TkFixedFont
 		$m add checkbutton -label 	"move group       - if checked"				-variable ::___zz___(gangcb)	-indicatoron 1	-font TkFixedFont	
 		$m add separator 					
@@ -2234,7 +2297,7 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 															} ] %W %D}
 																														
 		label		.lbp_console.xframe.labell	-text "Show Lines" -relief raised -bd 0
-		spinbox  	.lbp_console.xframe.sboxl 	-from 15 			-to 100 	-increment 1  -textvariable ::___zz___(proc_wid) -width 3 -font {courier 14}
+		spinbox  	.lbp_console.xframe.sboxl 	-from 15 			-to 100 	-increment 1  -textvariable ::___zz___(proc_wid) -width 3 -font {courier 14} -command [list $::___zz___(util+) showlines %W %s %d]
 		bind 		.lbp_console.xframe.sboxl  <MouseWheel> {apply [list {spinner value} { 
 															#	puts "spinnera= |$spinner|   value= |$value| "
 																if { $value > 0 } {
@@ -2408,8 +2471,12 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 
 
 # -------------------------------------------------------------------- do low level breakpoint  ----------------------------------------------
-
-	$::___zz___(bp+) "$ns $colon$comment" $::___zz___(cb3,.$ns) $::___zz___(cb4,.$ns) ;# and finally, we call the regular breakpoint if breakpoints not disabled
+if { $tailed } {
+	$::___zz___(bp+) "$ns $colon$comment" 0 1 1 ;# and finally, we call the regular breakpoint if breakpoints not disabled
+} else {
+	$::___zz___(bp+) "$ns $colon$comment" $::___zz___(cb3,.$ns) $::___zz___(cb4,.$ns) ;# and finally, we call the regular breakpoint if breakpoints not disabled	
+}
+	
 
 # -------------------------------------------------------------------- do low level breakpoint end -------------------------------------------
 
@@ -2454,6 +2521,10 @@ proc lbp+ { {comment {}} {bpid {}} } { ;# breakpoint from within a proc, will cr
 #	namespace eval $ns $ncmd ;# set the variables in the user's local
 #	$::___zz___(vw+) "${ns}::" .$ns
 
+	if {$::___zz___(tail) == 1} {
+		set ::___zz___(tail) 0
+		tailcall lbp+ $comment $bpid 1
+	}
 
 } 
 # ------------------------------- instrument + --------- instrument code with lbp + breakpoints ----------------------------------------------
@@ -2465,9 +2536,16 @@ proc instrument+ {procedure args} {
 # where id is generated as a large number so it should be unique
 # to use, do this:   eval [instrument+ procname]
 # after the proc has been defined, this will re-define it with debug code
-
 	set lbracket "\{"
 	set rbracket "\}"
+	set no_warn 0
+	set nw [lsearch -exact $args -nowarn]
+	if { $nw > -1 } {
+		set no_warn 1
+#		puts "$procedure - args1= |$args| "
+		set args [lreplace $args $nw $nw]
+#		puts "$procedure - args2= |$args| "
+	}
 # -------------------------------------------------------- instrument class methods, by faking it, quite a hack, but hey...
 	if { $procedure eq "-class" } { ;# instr -class class method
 	
@@ -2482,11 +2560,23 @@ proc instrument+ {procedure args} {
 		set themethod [lindex $args 1 ]
 		if { $themethod eq "*" } {
 			set all {}
-			foreach item [info class methods $theclass] {
-				append all [instrument+ -class $theclass $item]	
+			foreach item [info class methods $theclass -private] {
+#				puts stderr "item= |$item| theclass= |$theclass| "
+				if { $no_warn } {
+					append all [instrument+ -class $theclass $item -nowarn]	
+				} else {
+					append all [instrument+ -class $theclass $item]	
+				}
 			}
 			return $all
 		}
+		
+		if [catch {
+			oo::define $theclass export $themethod
+		} err_code] {
+			puts stderr $err_code 
+		}
+		
 		set def [info class definition $theclass $themethod]
 		set arglist [lindex $def 0]
 		set mcode [lindex $def 1]
@@ -2509,8 +2599,9 @@ proc instrument+ {procedure args} {
 			append result $item	
 		}
 		append result "\n$rbracket\n"
-#		puts "line1= |$line1| \nresult= \n\n\n|$result|\n\n\n newline1= |$newline1| "
 		rename ${theclass}__z__$themethod {} ;# get rid of the temporary proc we built so we could instrument it
+		append result "oo::define $theclass export $themethod\n"
+#		puts "line1= |$line1| \nresult= \n\n\n|$result|\n\n\n newline1= |$newline1| "
 		return $result
 	}
 
@@ -2576,12 +2667,84 @@ proc instrument+ {procedure args} {
 	set ln 0
 	set idn 1000000000
 	set out ""
-	foreach line $lines {
+	
+#	puts "nlines= |$nlines| "
+#	puts "pcode= |$pcode| "
+	set scrub 1
+	set lrev [lreverse [lrange $lines 0 end-1 ] ]
+#	puts "lrev= |$lrev| len= [llength $lrev]"
+	
+	foreach line $lrev {
 #		puts "line= |$line| "
+		if       { [string trim $line] eq "" } {
+#			puts "blank line"
+			incr scrub
+			continue
+		} elseif { [string index [string trim $line] 0]  eq "#"  } {
+#			puts "comment line"
+			incr scrub
+			continue
+		} else {
+#			puts "none, so done"
+			break
+		}
+	}
+#	puts "scrub= |$scrub| \n"
+	set scrub  [expr {   $nlines - $scrub  - 1 }]
+#	puts "scrub= |$scrub| \n"
+
+# at this point, scrub is the number of lines at the end we won't instrument, since we can't have anything after the final
+# statement in the proc, since that's the proc's return value iff there's no explicit return, so we can't instrument that
+# line or anything after it. So, we use the enable/disable code and turn off enable for the last set of lines
+# note this is not perfect, there could be an if statement with a result, best to always use explicit returns
+
+	set return_seen 0	
+#	puts "nlines= |$nlines| "
+	set skipit 0
+	foreach line $lines {
 		incr ln
+#		puts "line= |$line| ln=$ln scrub=$scrub"
+		if { $ln > $scrub } {
+			set enable 0
+		}
 		regsub {[ \t];#[ \t].*$} $line {} tline
+		if { [regexp {^[ \t]*return[ \t]*.*$} $line ]} {
+			set return_seen 1	
+		}
+		if { $skipit > 0 } { ;# we have a partial command across lines, don't instrument (only for set and puts now)
+			incr skipit -1
+#			append out "$line ;# from skipit $skipit\n"
+			append out "$line\n"
+			continue
+		}
 		set tline [string trim $tline]
 		set ok [info complete $tline] ;# not sure exactly how this works, but if its not complete, we may not want to instrument it
+		if { $ok } {
+			if { [regexp {^.*\{[ \t]*return[ \t]*.*\}$} $line ]} { ;# looking for a one line proc with a return
+#				puts stderr "one line command with a return $line"
+				set return_seen 1	
+			}
+		} else { ;# not a complete line, call utility to get the number of lines forward till we complete the command
+#			puts stderr "NOT ok = $ok"
+			if { [regexp {^[ \t]*(set|puts)[ \t]*.*$} $line ] || 1} { ;# looking for a set or puts statement that is incomplete
+#				puts stderr "a set or puts statement, but not complete: $line"
+				set skipitl [$::___zz___(util+) completeit $nlines $ln $lines]
+				set skipit [lindex $skipitl 0 ]
+				set cmd [lindex $skipitl 1 ]
+#				puts "cmd= |$cmd| "
+				update
+				set cmdname [string trimleft $cmd]
+				set zzz [regexp {^(\w+)[ \t]*} $cmdname -> cmdname]
+				
+				incr skipit -2	
+#				puts "skipit= |$skipit| cmdname = $cmdname zzz=$zzz"
+				if { $cmdname in {if while for foreach while proc} } {
+#					puts "don't do this one /$cmdname/"
+					set skipit 0
+				}
+			}
+			
+		}
 		# ok is now either 0 or 1, next we check for special cases and adjust ok based on that, but might just drop through
 		set enable_seen 0
 		if { [string index $tline 0] eq "#"} { ;# want to skip lines beginning with # so we don't step through comments
@@ -2617,7 +2780,7 @@ proc instrument+ {procedure args} {
 			set  words [split $tline]
 			set cmd [lindex $words 0]
 			if { $cmd eq "switch" } {
-				set norb 1 ;# if there's a switch statement seen, we apply the -norb option for here on
+#				set norb 1 ;# if there's a switch statement seen, we apply the -norb option for here on
 			}
 #			puts "cmd= |$cmd| " ;# get the command word, first on the line, but could be a final closing brace on a line by itself
 			set rb $rbracket
@@ -2686,13 +2849,18 @@ proc instrument+ {procedure args} {
 #	puts "procedure= |$procedure| "
 	append out "trace add execution $procedure enter \{$::___zz___(util+) tracer\}\n"
 	append out "trace add execution $procedure leave \{$::___zz___(util+) tracerend\}\n"
+	if { !$return_seen && $no_warn == 0} {
+		puts stderr "Warning, no return found in $procedure"
+	}
 	return $out
 }
 
 
+if { 00 } {
 
+ trace add variable ::___zz___(bpnum) write "dtracer "
 
-
+}
 
 
 
