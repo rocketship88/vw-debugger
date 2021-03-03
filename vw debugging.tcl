@@ -46,6 +46,7 @@ interp alias {} u {} util+
 
 set ::___zz___(lg-skip) [linsert [info global] end ___zz___] ;# skip initial system set of globals, + this one
 set ::___zz___(skips) 0         ;# the number of breakpoints to skip, set here to avoid an info exist test, do not change, internal use only
+set ::___zz___(showinstr) 0     ;# show instrumentation in code window
 set ::___zz___(cb1) 0           ;# the global wide breakpoint disable flag, set it here so we don't have to check for existance later
 set ::___zz___(level) 0         ;# 
 set ::___zz___(delay) 0         ;# debugging delay times to slow down what's going on
@@ -613,7 +614,7 @@ proc $::___zz___(vw+) {{pat {**}}  {w .vw} {wid 80} {alist {}}} {
 		${ttk}checkbutton $w.f2.cb2 -text "Auto-list    " 		-variable ::___zz___(cb2,$ww)
 		${ttk}checkbutton $w.f2.cb3 -text "No local BPs " 		-variable ::___zz___(cb3,$ww)
 		${ttk}checkbutton $w.f2.cb4 -text "No BP messages    " 	-variable ::___zz___(cb4,$ww)
-		${ttk}checkbutton $w.f2.cb5 -text "Show Instr Code" 	-variable ::___zz___(cb5,$ww)
+		${ttk}checkbutton $w.f2.cb5 -text "spare" 				-variable ::___zz___(cb5,$ww)
 		set topguy [winfo toplevel $w]
 		set tcmd "wm attributes $topguy -topmost \$::___zz___(cb6,$ww)"
 #		puts "topguy= |$topguy| tcmd= |$tcmd| "
@@ -1305,7 +1306,7 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 		}
 		set tfont "$font $size"
 		$w config -font "$font $size" -tabs "[expr {4 * [font measure $tfont 0]}] left"
-	} elseif { $func eq "completeit" } { 	;# number of lines to show, would like this to be immediate, but requires a step
+	} elseif { $func eq "completeit" } { 	;# see if the current line is a complete command, if not, find the end on following lines
 #		puts "\n\n\nargs = $args\n\n\n"
 		set nlines [lindex $args 0 ]
 		set ln [lindex $args 1 ]
@@ -1322,10 +1323,10 @@ proc $::___zz___(util+) {func args} { ;# increase or decrease font, and do the l
 			}	
 		}
 #		puts "collect= |\n\n\n$collect\n\n\n| n=$n   nn=$nn"
-		return [list $nn $collect]
+		return [list $nn $collect] ;# return the number of lines following to not instrument
 # ------------------------------------------------------ showlines    --------------------------------------------------
 
-	} elseif { $func eq "showlines" } { 	;# number of lines to show, would like this to be immediate, but requires a step
+	} elseif { $func eq "showlines" } { 	;# number of lines to show, is now immediate if one changes the spinbox for lines
 #		puts "func= |$func| args= |$args| "
 		set ::___zz___(tail) 1
 		after 0 $::___zz___(go+)
@@ -1911,11 +1912,7 @@ proc lbp+ { {comment {}} {bpid {}} {tailed 0}} { ;# breakpoint from within a pro
 	}		
 #		puts "ns= |$ns| proc_name= |$proc_name| "
 # ------------------------------------------------------  setup to display instrumentation but one last escape for no local breakpoints here, but incr the count ---
-	if { [info exist ::___zz___(cb5,.$ns)] } {
-		set show_instr $::___zz___(cb5,.$ns)
-	} else {
-		set show_instr 0	
-	}
+	set show_instr $::___zz___(showinstr)
 	if { [info exist ::___zz___(cb3,.$ns)]  && $::___zz___(cb3,.$ns) && $::___zz___(delaya) <= 0} {
 		incr ::___zz___(bpnum)
 		return
@@ -2203,6 +2200,7 @@ proc lbp+ { {comment {}} {bpid {}} {tailed 0}} { ;# breakpoint from within a pro
 		$m add separator 
 		$m add command 	-label 		"No bp Msgs       - check all" 					-command [list $::___zz___(util+) no-bp-messages-all]			-font TkFixedFont
 		$m add checkbutton -label 	"No bp Msgs (def) - if checked"		-variable ::___zz___(bp_messages_default)	-indicatoron 1	-font TkFixedFont	
+		$m add checkbutton -label 	"Show instrument+ - if checked"		-variable ::___zz___(showinstr)	-indicatoron 1	-font TkFixedFont	-command [list $::___zz___(util+) showlines %W %s %d]
 		$m add separator 					
 		$m add command 	-label 		"Clear code window" 				-command {.lbp_console.cframe.text delete 1.0 end}				-font TkFixedFont
 		$m add command 	-label 		"Bottom of code window" 			-command {.lbp_console.cframe.text see end; .lbp_console.cframe.text mark set insert end}	-font TkFixedFont
