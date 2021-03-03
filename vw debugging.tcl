@@ -2730,14 +2730,14 @@ proc instrument+ {procedure args} {
 				set skipit [lindex $skipitl 0 ]
 				set cmd [lindex $skipitl 1 ]
 #				puts "cmd= |$cmd| "
-				update
+#				update
 				set cmdname [string trimleft $cmd]
 				set zzz [regexp {^(\w+)[ \t]*} $cmdname -> cmdname]
 				
 				incr skipit -2	
-#				puts "skipit= |$skipit| cmdname = $cmdname zzz=$zzz"
-				if { $cmdname in {if while for foreach while proc} } {
-#					puts "don't do this one /$cmdname/"
+#				puts "skipit= |$skipit| cmdname = /$cmdname/ zzz=/$zzz/"
+				if { $cmdname in {if while for foreach while proc} || $zzz == 0} {
+#					puts "don't do this one /[string range $cmdname  0  30]/"
 					set skipit 0
 				}
 			}
